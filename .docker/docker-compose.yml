@@ -1,0 +1,25 @@
+services:
+  web:
+    container_name: colf
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    ports:
+      - "9901:8000"
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "app=colf"
+      - "service=api"
+    networks:
+      - universe
+
+networks:
+  universe:
+    external: true
