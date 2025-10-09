@@ -1,7 +1,7 @@
 from google.adk.runners import Runner
 from google.adk.agents import Agent
 from google.adk.sessions import InMemorySessionService
-from google.genai import types
+from datetime import datetime
 
 APP_NAME = "my_app"
 USER_ID = "my_user"
@@ -29,5 +29,3 @@ async def run_agent(agent: Agent, content: str) -> str:
             final_response = event.content.parts[0].text
             return final_response
         
-def build_string_content(prompt):
-    return types.Content(role="user", parts=[types.Part(text=prompt)])
