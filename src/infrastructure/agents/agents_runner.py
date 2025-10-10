@@ -1,12 +1,12 @@
 from google.adk.runners import Runner
 from google.adk.agents import Agent
-from google.adk.sessions import InMemorySessionService
+from google.adk.sessions import InMemorySessionService, Session
 from datetime import datetime
 
 APP_NAME = "my_app"
 USER_ID = "my_user"
 
-async def run_agent(agent: Agent, content: str) -> str:
+async def run_agent(agent: Agent, content: str, session: Session, session_service: InMemorySessionService) -> str:
     # TODO: Use a persistent session service (DatabaseSessionService, VertexAiSessionService)
     # if session_service is None:
     #     session_service = InMemorySessionService()
@@ -14,13 +14,6 @@ async def run_agent(agent: Agent, content: str) -> str:
     # if session_id is None:
     #     session = session_service.create_session(app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID)
     #     session_id = session.id
-
-    session_service = InMemorySessionService()
-    session = await session_service.create_session(
-        app_name=APP_NAME,
-        user_id=USER_ID,
-        state={}
-    )
 
     runner = Runner(agent=agent, app_name=APP_NAME, session_service=session_service)
 
