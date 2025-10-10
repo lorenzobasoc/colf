@@ -6,12 +6,12 @@ from ....infrastructure.agents.general_tools import get_current_date
 
 load_dotenv()
 
-chat_expense_agent = Agent(
-    name="chat_expense_agent",
+message_expense_agent = Agent(
+    name="message_expense_agent",
     model=os.getenv('LLM_MODEL'),
     description=(
         "Agent to classify expenses from natural lenguage from Telegram messagges."
     ),
-    instruction=read_prompt_file(os.path.join(os.path.dirname(__file__), "prompts", "chat_expense_agent_prompt.md")),
+    instruction=read_prompt_file(os.path.join(os.path.dirname(__file__), "prompts", "message_expense_agent_prompt.md")),
     tools=[get_current_date],
 )

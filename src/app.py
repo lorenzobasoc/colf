@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
+from .modules.expenses.agent_api.expense_agent_controller import ExpenseAgentController
 
 app = FastAPI(title="Colf API", version="1.0.0")
+
+expense_controller = ExpenseAgentController()
+app.include_router(expense_controller.get_router())
 
 
 @app.get("/", response_class=HTMLResponse)

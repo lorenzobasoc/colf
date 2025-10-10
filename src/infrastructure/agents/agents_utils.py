@@ -6,3 +6,13 @@ def build_string_content(prompt):
 def read_prompt_file(file_path):
     with open(file_path, 'r') as file:
         return file.read()
+    
+def clean_agent_response(response: str) -> str:
+    cleaned = response.strip()
+    
+    if cleaned.startswith('```json'):
+        cleaned = cleaned[7:]
+    if cleaned.endswith('```'):
+        cleaned = cleaned[:-3]
+    
+    return cleaned.strip()
