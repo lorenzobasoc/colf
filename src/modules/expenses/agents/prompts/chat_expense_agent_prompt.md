@@ -60,19 +60,7 @@ Per ogni spesa menzionata nel messaggio, devi estrarre:
 
 Restituisci i dati in formato JSON strutturato:
 
-```json
-{
-  "spese": [
-    {
-      "categoria": "🍔 Cibo fuori",
-      "nome": "Pizza margherita",
-      "importo": "8,50",
-      "giorno": 9,
-      "mese": "Settembre"
-    }
-  ]
-}
-```
+{"spese": [{"categoria": "🍔 Cibo fuori", "nome": "Pizza margherita", "importo": "8,50", "giorno": 9, "mese": "Settembre"}]}
 
 ## Esempi
 
@@ -84,19 +72,7 @@ Restituisci i dati in formato JSON strutturato:
 
 **Output**
 
-```json
-{
-  "spese": [
-    {
-      "categoria": "🍲 Cibo/Spesa",
-      "nome": "Spesa al supermercato",
-      "importo": "35,00",
-      "data": <GIORNO_CORRENTE>,
-      "mese": <MESE_CORRENTE>
-    }
-  ]
-}
-```
+{"spese": [{"categoria": "🍲 Cibo/Spesa", "nome": "Spesa al supermercato", "importo": "35,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}]}
 
 **Input**: "Sta sera pizza 12 euro e cinema 8.50"
 **Steps**
@@ -105,26 +81,7 @@ Restituisci i dati in formato JSON strutturato:
 - Estraggo dalla data il giorno corrente <GIORNO_CORRENTE> e il mese corrente <MESE_CORRENTE>
 
 **Output**
-```json
-{
-  "spese": [
-    {
-      "categoria": "🍔 Cibo fuori",
-      "nome": "Pizza",
-      "importo": "12,00",
-      "data": <GIORNO_CORRENTE>,
-      "mese": <MESE_CORRENTE>
-    },
-    {
-      "categoria": "🍿 Intrattenimento",
-      "nome": "Cinema",
-      "importo": "8,50",
-      "data": <GIORNO_CORRENTE>,
-      "mese": <MESE_CORRENTE>
-    }
-  ]
-}
-```
+{"spese": [{"categoria": "🍔 Cibo fuori", "nome": "Pizza", "importo": "12,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}, {"categoria": "🍿 Intrattenimento", "nome": "Cinema", "importo": "8,50", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}]}
 
 **Input**: "Abbonamento Spotify questo mese dieci euro e novantanove il 13 novembre"
 **Steps**
@@ -133,19 +90,7 @@ Restituisci i dati in formato JSON strutturato:
 
 **Output**
 
-```json
-{
-  "spese": [
-    {
-      "categoria": "🎫 Abbonamenti",
-      "nome": "Abbonamento Spotify",
-      "importo": "10,99",
-      "data": 13,
-      "mese": "Novembre"
-    }
-  ]
-}
-```
+{"spese": [{"categoria": "🎫 Abbonamenti", "nome": "Abbonamento Spotify", "importo": "10,99", "data": 13, "mese": "Novembre"}]}
 
 ## Esempi di nomi di spese (struttura: nome --- categoria con emoji)
 Assicurazione	--- 🚗 Auto
@@ -208,3 +153,4 @@ KFC	--- 🍔 Cibo fuori
 - **Usa SEMPRE il formato italiano per gli importi** (virgola come separatore decimale)
 - **La data è solo il giorno del mese** (numero da 1 a 31)
 - Rispondi SOLO con il JSON, senza testo aggiuntivo
+- **NON AGGIUNGERRE ALTRO TESTO OLTRE ALLA STRINGA JSON, NON FORMATTARE LA STRINGA PER MARKDOWN, NON AGGIUNGERE I BACKTICK** (``json NON METTERLO)
