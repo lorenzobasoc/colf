@@ -1,14 +1,20 @@
 from src.infrastructure.agents.agents_runner import run_agent
 from src.infrastructure.agents.agents_utils import build_string_content, clean_agent_response
-from src.modules.expenses.agents.expense_agents import message_expense_agent
+from src.modules.expenses.agents.expense_agents import message_workflow_agent
+from google.adk.sessions import InMemorySessionService, Session
+
+APP_NAME = "my_app"
+USER_ID = "my_user"
+SESSION_ID = "session_id"
 
 class ExpenseService:
-    async def call_message_expense_agent(self, message: str) -> str:
+    async def message_expense_workflow(self, message: str) -> str:
         message_content = build_string_content(message)
 
-        response = await run_agent(agent=message_expense_agent, content=message_content)
+        session_service = InMemorySessionService()
+        session = await session_service.create_session(app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID)
 
-        cleaned_response = clean_agent_response(response)
-        
-        return cleaned_response
+        response = await run_agent(agent=message_workflow_agent, content=message_content, session=session, session_service=session_service)
+
+        return response
     

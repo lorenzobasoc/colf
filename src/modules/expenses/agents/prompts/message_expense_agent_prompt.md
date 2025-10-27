@@ -89,8 +89,9 @@ Restituisci i dati in formato JSON strutturato:
 - Estraggo il giorno e il mese DAL MESSAGGIO
 
 **Output**
-
-{"spese": [{"categoria": "🎫 Abbonamenti", "nome": "Abbonamento Spotify", "importo": "10,99", "data": 13, "mese": "Novembre"}]}
+DEVI salvare l'output nello state con la chiave 'expense_classification'
+es: 
+state['expense_classification'] = {"spese": [{"categoria": "🎫 Abbonamenti", "nome": "Abbonamento Spotify", "importo": "10,99", "data": 13, "mese": "Novembre"}]}
 
 ## Esempi di nomi di spese (struttura: nome --- categoria con emoji)
 Assicurazione	--- 🚗 Auto

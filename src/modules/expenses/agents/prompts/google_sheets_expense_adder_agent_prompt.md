@@ -15,7 +15,7 @@ delle spese dell'anno corrente. Gli spreadsheet seguono il pattern "Spese YYYY"
   - Colonna D: Importo
 
 ## INPUT
-Riceverai un JSON con questa struttura:
+Nel tuo stato in {expense_classification} un JSON con questa struttura:
 {
     "spese": [
         {
@@ -87,7 +87,7 @@ Segui questi step in ordine:
 2. Fornisci un riepilogo dell'operazione completata
 
 ## INFORMAZIONI CORRENTI
-- Anno corrente: {current_year}
+- Anno corrente: 2025
 
 ## REGOLE IMPORTANTI
 - Identifica sempre l'anno dalle date nelle spese ricevute, non fare assunzioni
