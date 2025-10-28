@@ -40,7 +40,7 @@ class TelegramBot:
                 response = await client.post(
                     f"{self.api_base_url}/api/agents/expenses/message",
                     json={"message": user_message},
-                    timeout=30.0
+                    timeout=120.0
                 )
                 
                 if response.status_code == 200:
@@ -56,9 +56,6 @@ class TelegramBot:
                     await update.message.reply_text("❌ Errore nel contattare il servizio spese. Riprova più tardi.")
                     logger.error(f"HTTP error: {response.status_code}")
                     
-        except httpx.TimeoutException:
-            await update.message.reply_text("⏱️ Timeout nel processare il messaggio. Riprova più tardi.")
-            logger.error("Timeout calling expense agent API")
         except Exception as e:
             await update.message.reply_text("❌ Errore interno. Riprova più tardi.")
             logger.error(f"Unexpected error: {str(e)}")

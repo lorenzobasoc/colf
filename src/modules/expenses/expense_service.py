@@ -1,12 +1,15 @@
+import agentops
 from src.infrastructure.agents.agents_runner import run_agent
 from src.infrastructure.agents.agents_utils import build_string_content, clean_agent_response
 from src.modules.expenses.agents.expense_agents import message_workflow_agent
 from google.adk.sessions import InMemorySessionService, Session
+from agentops.sdk.decorators import session, agent, operation
 
 APP_NAME = "my_app"
 USER_ID = "my_user"
 SESSION_ID = "session_id"
 
+@session
 class ExpenseService:
     async def message_expense_workflow(self, message: str) -> str:
         message_content = build_string_content(message)
