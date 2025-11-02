@@ -54,3 +54,6 @@ ehthumbs.db
 Thumbs.db
 
 .keys
+
+# Docker
+.docker/
