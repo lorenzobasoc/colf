@@ -8,13 +8,16 @@ WORKDIR /app
 # Install uv using pip (compatible with all architectures)
 RUN pip install uv
 
-# Copy dependency files from parent directory
+# Copy only dependency files first for better caching
 COPY ../pyproject.toml ../uv.lock ./
 
+# Install dependencies first (this layer will be cached if dependencies don't change)
 RUN uv sync --frozen --no-cache
 
-# Copy application code from parent directory
-COPY ../ .
+# Copy application code (excluding files that change often)
+COPY ../app/ ./app/
+COPY ../main.py ./
+# Add other specific files/directories you need
 
 RUN adduser --disabled-password --gecos '' appuser
 RUN chown -R appuser:appuser /app

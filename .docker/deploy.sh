@@ -53,13 +53,9 @@ ssh $RASPBERRY_PI_USER@$RASPBERRY_PI_HOST << EOF
     echo "Stopping existing containers..."
     docker-compose down || true
     
-    # Remove existing images to force rebuild
-    echo "Removing existing images..."
-    docker-compose down --rmi all || true
-    
-    # Build new image
+    # Build new image (using cache for faster builds)
     echo "Building new image..."
-    docker-compose build --no-cache
+    docker-compose build
     
     # Start the application
     echo "Starting application..."
