@@ -15,6 +15,7 @@ coverage.xml
 *.cover
 *.log
 .git
+.gitignore
 .mypy_cache
 .pytest_cache
 .hypothesis
@@ -27,3 +28,7 @@ venv/
 .env.*.local
 node_modules/
 npm-debug.log*
+README.md
+agentops.log
+.docker/
+.claude/
