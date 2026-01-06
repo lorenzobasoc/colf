@@ -4,4 +4,4 @@ comando per eseguire i test:
 uv run pytest tests/ -vs
 
 comando per eseguire l'api
-uv run uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn src.colf.app:app --host 0.0.0.0 --port 8000 --reload

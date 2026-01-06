@@ -1,7 +1,7 @@
 import agentops
-from src.infrastructure.agents.agents_runner import run_agent
-from src.infrastructure.agents.agents_utils import build_string_content, clean_agent_response
-from src.modules.expenses.agents.expense_agents import message_workflow_agent
+from ...infrastructure.agents.agents_runner import run_agent
+from ...infrastructure.agents.agents_utils import build_string_content, clean_agent_response
+from .agents.expense_agents import message_workflow_agent
 from google.adk.sessions import InMemorySessionService, Session
 from agentops.sdk.decorators import session, agent, operation
 

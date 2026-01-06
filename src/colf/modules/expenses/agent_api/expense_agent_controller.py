@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
-from src.modules.expenses.agent_api.expense_agent_requests import MessageExpenseAgentRequest, MessageExpenseAgentResponse
-from src.modules.expenses.expense_service import ExpenseService
+from .expense_agent_requests import MessageExpenseAgentRequest, MessageExpenseAgentResponse
+from ..expense_service import ExpenseService
 
 def get_expense_service() -> ExpenseService:
     return ExpenseService()

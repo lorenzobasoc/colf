@@ -2,6 +2,8 @@ FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
 
 WORKDIR /app
 
@@ -18,10 +20,5 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 # Copy application code
 COPY . .
-
-# Create non-root user
-RUN adduser --disabled-password --gecos '' appuser
-RUN chown -R appuser:appuser /app
-USER appuser
 
 CMD ["uv", "run", "python", "run.py"]
