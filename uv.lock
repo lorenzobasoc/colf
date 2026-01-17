@@ -247,26 +247,16 @@ name = "colf"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "fastapi" },
-    { name = "httpx" },
-    { name = "mcp" },
     { name = "mcp-google-sheets" },
-    { name = "packaging" },
     { name = "parlant" },
     { name = "python-dotenv" },
-    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "fastapi", specifier = ">=0.117.1" },
-    { name = "httpx", specifier = ">=0.27.0" },
-    { name = "mcp", specifier = ">=1.16.0" },
     { name = "mcp-google-sheets", specifier = ">=0.5.1" },
-    { name = "packaging", specifier = ">=24.2" },
     { name = "parlant", specifier = ">=3.1.2" },
     { name = "python-dotenv", specifier = ">=1.1.1" },
-    { name = "uvicorn", specifier = ">=0.37.0" },
 ]
 
 [[package]]

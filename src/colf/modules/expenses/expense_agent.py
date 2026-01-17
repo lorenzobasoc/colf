@@ -1,9 +1,14 @@
 import os
+import asyncio
 import parlant.sdk as p
+import logging
 from dotenv import load_dotenv
-from expense_categories import categories
-from expense_agent_guidelines import add_guidelines
-from expense_agent_journeys import create_message_categorization_journey
+from .expense_categories import categories
+from .expense_agent_guidelines import add_guidelines
+from .expense_agent_journeys import create_message_categorization_journey
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 load_dotenv()
 
@@ -12,10 +17,11 @@ env = {
     "DRIVE_FOLDER_ID": os.getenv('DRIVE_FOLDER_ID')
 }
 
-async def expense_agent():
-    async with p.Server() as server:
+async def run_expense_agent():
+    async with p.Server(port=8000, log_level=p.LogLevel.INFO) as server:
         agent = await server.create_agent(
             name="expense_agent",
+            id="expenses",
             description="Agente che classifica le spese a partire da messaggi Telegram in linguaggio naturale e le aggiungere a un foglio Google Sheets.",
         )
 
@@ -28,6 +34,8 @@ async def expense_agent():
         await add_guidelines(agent)
 
         await create_message_categorization_journey(agent)
+
+        logger.info("Parlant server is running on port 8000. Press Ctrl+C to stop.")
 
         return agent
 
