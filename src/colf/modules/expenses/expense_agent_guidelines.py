@@ -18,5 +18,10 @@ async def add_guidelines(agent: p.Agent) -> None:
 
     await agent.create_guideline(
         condition="Hai estratto tutte le informazioni",
-        action="Restituiscile in formato JSON con le chiavi: categoria, nome, importo, giorno, mese SENZA aggiungere ulteriore testo"
+        action="Formattale in formato JSON con le chiavi: categoria, nome, importo, giorno, mese"
+    )
+
+    await agent.create_guideline(
+        condition="Hai formattato le informazioni in formato JSON",
+        action="Restituisci all'utente SOLO ed ESCLUSIVAMENTE il JSON, senza aggiungere altro testo. Il JSON deve essere contenuto in un messaggio senza altro testo."
     )

@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">Colf Notification</string>
+    <string name="service_enabled">Service Enabled</string>
+    <string name="service_disabled">Service Disabled</string>
+    <string name="permission_required">Notification Permission Required</string>
+    <string name="grant_permission">Grant Permission</string>
+    <string name="status_listening">Listening for Intesa Notifications...</string>
+    <string name="status_idle">Service is OFF</string>
+</resources>

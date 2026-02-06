@@ -35,8 +35,6 @@ async def run_expense_agent():
 
         await create_message_categorization_journey(agent)
 
-        logger.info("Parlant server is running on port 8000. Press Ctrl+C to stop.")
-
         return agent
 
 
