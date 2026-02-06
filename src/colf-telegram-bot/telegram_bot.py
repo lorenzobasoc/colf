@@ -2,7 +2,8 @@ import os
 import asyncio
 import logging
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.constants import ChatAction
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import httpx
 from dotenv import load_dotenv
 
@@ -34,6 +35,12 @@ class TelegramBot:
         username = update.effective_user.username or "Unknown"
         
         logger.info(f"Received message from {username} ({user_id}): {user_message}")
+        
+        if update.effective_chat.id:
+            await context.bot.send_chat_action(
+                chat_id=update.effective_chat.id,
+                action=ChatAction.TYPING
+            )
         
         try:
             async with httpx.AsyncClient() as client:
