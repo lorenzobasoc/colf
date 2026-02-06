@@ -8,9 +8,9 @@ from google.adk.sessions import InMemorySessionService, Session
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 sys.path.insert(0, project_root)
 
-from src.infrastructure.agents.agents_runner import run_agent
-from src.infrastructure.agents.agents_utils import build_string_content
-from src.modules.expenses.agents.expense_agents import expense_message_categorizer_agent, google_sheets_expense_adder_agent, message_workflow_agent
+from src.colf.infrastructure.agents.agents_runner import run_agent
+from src.colf.infrastructure.agents.agents_utils import build_string_content
+from src.colf.modules.expenses.agents.expense_agents import expense_message_categorizer_agent, google_sheets_expense_adder_agent, message_workflow_agent
 
 APP_NAME = "my_app"
 USER_ID = "my_user"

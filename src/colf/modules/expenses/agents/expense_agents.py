@@ -1,10 +1,9 @@
 import os
-import sys
 import logging
 import agentops
 from pathlib import Path
 from dotenv import load_dotenv
-from google.adk.agents import Agent, SequentialAgent, ParallelAgent
+from google.adk.agents import Agent
 from mcp import StdioServerParameters
 from ....infrastructure.agents.agents_utils import read_prompt_file
 from ....infrastructure.agents.general_tools import get_current_date
@@ -65,6 +64,3 @@ message_workflow_agent = Agent(
     instruction=(read_prompt_file(Path(__file__).parent / "prompts" / "message_workflow_agent_prompt.md")),
     tools=[tool1, tool2]
 )
-
-
-# Notifications workflow

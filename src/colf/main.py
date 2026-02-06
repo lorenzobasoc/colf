@@ -1,4 +1,4 @@
-from src.app import app
+from src.colf.app import app
 
 def main():
     import uvicorn
