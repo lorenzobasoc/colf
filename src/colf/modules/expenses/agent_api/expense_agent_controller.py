@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends
 from .expense_agent_requests import MessageExpenseAgentRequest, MessageExpenseAgentResponse
 from ..expense_service import ExpenseService
 
+from functools import lru_cache
+
+@lru_cache()
 def get_expense_service() -> ExpenseService:
     return ExpenseService()
 
