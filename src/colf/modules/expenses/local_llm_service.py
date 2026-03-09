@@ -20,7 +20,7 @@ class LocalLLMService:
         try:
             self.llm = Llama(
                 model_path=self.model_path,
-                n_ctx=4096, # Adjust context window if needed
+                n_ctx=4096,
                 verbose=False
             )
         except Exception as e:
@@ -57,17 +57,8 @@ class LocalLLMService:
         # However, modifying the prompt text dynamically is safer.
         
         
-        system_instruction = f"""
-{self.system_prompt_template}
+        system_instruction = self.system_prompt_template
 
-DATI DI CONTESTO ATTUALI:
-Oggi è il {current_date_str}.
-Se la data non è specificata nel messaggio, usa la data di oggi.
-NON chiamare nessun tool.
-"""
-
-        # Structuring the prompt for Llama
-        # Simple chat format
         messages = [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": text}
@@ -84,10 +75,6 @@ NON chiamare nessun tool.
             logger.info(f"LLM Response: {content}")
             
             cleaned_content = clean_agent_response(content)
-            
-            # Extract JSON
-            # Sometimes models wrap in markdown ```json ... ```
-            # clean_agent_response handles that.
             
             data = json.loads(cleaned_content)
             return data
