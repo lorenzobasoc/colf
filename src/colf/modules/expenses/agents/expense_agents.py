@@ -28,6 +28,15 @@ env = {
     "DRIVE_FOLDER_ID": os.getenv('DRIVE_FOLDER_ID')
 }
 
+expense_message_categorizer_agent = Agent(
+    name="expense_message_categorizer_agent",
+    model=os.getenv('LLM_MODEL'),
+    description=("Agent to classify expenses from natural language from Telegram messagges."),
+    instruction=read_prompt_file(Path(__file__).parent / "prompts" / "expense_message_categorizer_agent_prompt.md"),
+    tools=[ get_current_date ],
+    output_key="expense_classification"
+)
+
 google_sheets_expense_adder_agent = Agent(
     name="google_sheets_expense_adder_agent",
     model=os.getenv('LLM_MODEL'),
@@ -42,16 +51,6 @@ google_sheets_expense_adder_agent = Agent(
             ),
         )
     ],
-)
-
-# Telegram messages workflow
-expense_message_categorizer_agent = Agent(
-    name="expense_message_categorizer_agent",
-    model=os.getenv('LLM_MODEL'),
-    description=("Agent to classify expenses from natural language from Telegram messagges."),
-    instruction=read_prompt_file(Path(__file__).parent / "prompts" / "expense_message_categorizer_agent_prompt.md"),
-    tools=[ get_current_date ],
-    output_key="expense_classification"
 )
 
 tool1 = agent_tool.AgentTool(agent=expense_message_categorizer_agent)

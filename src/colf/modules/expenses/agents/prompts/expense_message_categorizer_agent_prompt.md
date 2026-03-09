@@ -60,7 +60,7 @@ Per ogni spesa menzionata nel messaggio, devi estrarre:
 
 Restituisci i dati in formato JSON strutturato:
 
-{"spese": [{"categoria": "🍔 Cibo fuori", "nome": "Pizza margherita", "importo": "8,50", "giorno": 9, "mese": "Settembre"}]}
+{"categoria": "🍔 Cibo fuori", "nome": "Pizza margherita", "importo": "8,50", "giorno": 9, "mese": "Settembre"}
 
 ## Esempi
 
@@ -72,16 +72,16 @@ Restituisci i dati in formato JSON strutturato:
 
 **Output**
 
-{"spese": [{"categoria": "🍲 Cibo/Spesa", "nome": "Spesa al supermercato", "importo": "35,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}]}
+{"categoria": "🍲 Cibo/Spesa", "nome": "Spesa al supermercato", "importo": "35,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}
 
-**Input**: "Sta sera pizza 12 euro e cinema 8.50"
+**Input**: "Sta sera pizza 12 euro"
 **Steps**
 - La data NON è esplicitata, DEVO invocare il tool _get_current_date_
 - Il tool mi ritorna la data odierna
 - Estraggo dalla data il giorno corrente <GIORNO_CORRENTE> e il mese corrente <MESE_CORRENTE>
 
 **Output**
-{"spese": [{"categoria": "🍔 Cibo fuori", "nome": "Pizza", "importo": "12,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}, {"categoria": "🍿 Intrattenimento", "nome": "Cinema", "importo": "8,50", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}]}
+{"categoria": "🍔 Cibo fuori", "nome": "Pizza", "importo": "12,00", "data": <GIORNO_CORRENTE>, "mese": <MESE_CORRENTE>}
 
 **Input**: "Abbonamento Spotify questo mese dieci euro e novantanove il 13 novembre"
 **Steps**
@@ -91,7 +91,7 @@ Restituisci i dati in formato JSON strutturato:
 **Output**
 DEVI salvare l'output nello state con la chiave 'expense_classification'
 es: 
-state['expense_classification'] = {"spese": [{"categoria": "🎫 Abbonamenti", "nome": "Abbonamento Spotify", "importo": "10,99", "data": 13, "mese": "Novembre"}]}
+state['expense_classification'] = {"categoria": "🎫 Abbonamenti", "nome": "Abbonamento Spotify", "importo": "10,99", "data": 13, "mese": "Novembre"}
 
 ## Esempi di nomi di spese (struttura: nome --- categoria con emoji)
 Assicurazione	--- 🚗 Auto
