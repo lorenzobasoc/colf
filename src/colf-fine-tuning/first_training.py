@@ -10,7 +10,6 @@ from peft import LoraConfig, get_peft_model
 import torch
 from datetime import datetime
 
-# Callback personalizzato per logging dettagliato
 class LoggingCallback(TrainerCallback):
     def on_log(self, args, state, control, logs=None, **kwargs):
         if logs:
@@ -77,11 +76,6 @@ print("\n[3/6] 📂 Caricamento dataset...")
 dataset = load_dataset('json', data_files=dataset_path)['train']
 print(f"✓ Dataset caricato: {len(dataset)} esempi")
 
-# Mostra un esempio
-print("\n📋 Esempio dal dataset:")
-print(f"  Instruction: {dataset[0]['instruction'][:100]}...")
-print(f"  Response: {dataset[0]['response'][:100]}...")
-
 # 4. Tokenizzazione
 print("\n[4/6] 🔤 Tokenizzazione del dataset...")
 
@@ -125,9 +119,9 @@ training_args = TrainingArguments(
     learning_rate=2e-4,
     num_train_epochs=50,
     fp16=False,
-    logging_steps=10,  # Log ogni 10 steps
+    logging_steps=10,
     save_strategy='epoch',
-    save_total_limit=3,  # Mantieni solo ultimi 3 checkpoint
+    save_total_limit=3,
     report_to='none',
     remove_unused_columns=False,
 )

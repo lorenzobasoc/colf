@@ -12,10 +12,9 @@ print("="*60)
 
 # Configurazione
 model_name = 'Qwen/Qwen2.5-1.5B-Instruct'
-adapter_path = './model/checkpoint-504'  # ← CAMBIA CON IL TUO CHECKPOINT
+adapter_path = './model/checkpoint-504'  # ← CAMBIARE CON CHECKPOINT EFFETTIVO
 dataset_path = 'train_data.jsonl'
 
-# Rileva dispositivo (MPS per Apple Silicon, altrimenti CPU)
 if torch.backends.mps.is_available():
     device = 'mps'  # Apple Silicon M1/M2/M3
     print("✅ Dispositivo: Apple Silicon (MPS)")

@@ -19,8 +19,7 @@ print("🔄 Caricamento modelli...")
 print(f"  V1: {v1_path}")
 print(f"  V2: {v2_path}\n")
 
-# ← FIX: Forza CPU invece di auto
-device = "cpu"  # ← AGGIUNTO
+device = "cpu"
 print(f"📍 Dispositivo: {device}\n")
 
 # Carica modelli SU CPU
