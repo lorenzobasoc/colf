@@ -136,7 +136,7 @@ print(f"✅ Dataset preparato ({len(eval_loader)} batch)")
 # print("💬 TEST GENERAZIONE")
 # print("="*60)
 
-# raw_data = load_dataset('json', data_files=dataset_path)['train']
+raw_data = load_dataset('json', data_files=dataset_path)['train']
 
 def generate(model, instruction):
     prompt = f'### Instructions:\n{instruction}\n### Response:\n'
