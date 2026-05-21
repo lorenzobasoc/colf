@@ -7,7 +7,6 @@ ENV LC_ALL=en_US.UTF-8
 
 WORKDIR /app
 
-# Install system dependencies for compiling Python packages (cached)
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt \
     apt-get update && apt-get install -y \
@@ -16,8 +15,6 @@ RUN --mount=type=cache,target=/var/cache/apt \
     g++ \
     libffi-dev \
     libssl-dev \
-    libgeos-dev \
-    libgeos-c1t64 \
     curl \
     pkg-config \
     locales && \
@@ -25,28 +22,23 @@ RUN --mount=type=cache,target=/var/cache/apt \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen
 
-# Install uv using pip (compatible with all architectures)
 RUN pip install uv
 
-# Copy only dependency files first for better caching
 COPY pyproject.toml uv.lock ./
 
-# Create virtual environment and install dependencies
 ENV UV_HTTP_TIMEOUT=300
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv && \
-    uv pip install numpy && \
     uv sync --frozen
 
-# Activate virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
-# Copy application code (excluding files that change often)
-COPY src/colf/ ./src/
-COPY tests/ ./tests/
-COPY .keys/ ./.keys/
+COPY src/colf ./colf
+COPY .keys ./.keys
 
+ENV LLM_NAME=qwen2.5-1.5b-instruct-q4_k_m.gguf
+ENV SERVICE_ACCOUNT_PATH=/app/.keys/sheets_mcp_service_account.json
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "src.app:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "colf.app:app", "--host", "0.0.0.0", "--port", "8000"]
