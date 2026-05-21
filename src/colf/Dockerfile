@@ -1,4 +1,4 @@
-FROM python:3.13-slim
+FROM python:3.13.5-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -17,7 +17,9 @@ RUN --mount=type=cache,target=/var/cache/apt \
     libssl-dev \
     curl \
     pkg-config \
-    locales && \
+    locales \
+    cmake \
+    ninja-build && \
     sed -i '/it_IT.UTF-8/s/^# //g' /etc/locale.gen && \
     sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen && \
     locale-gen
@@ -27,6 +29,7 @@ RUN pip install uv
 COPY pyproject.toml uv.lock ./
 
 ENV UV_HTTP_TIMEOUT=300
+ENV UV_CONCURRENT_DOWNLOADS=1
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv venv && \
     uv sync --frozen
