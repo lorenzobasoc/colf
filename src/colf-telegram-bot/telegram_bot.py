@@ -35,29 +35,35 @@ class TelegramBot:
         
         logger.info(f"Received message from {username} ({user_id}): {user_message}")
         
+        thinking_msg = None
         try:
+            thinking_msg = await update.message.reply_text("Thinking... 🤔")
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     f"{self.api_base_url}/api/agents/expenses/message",
                     json={"message": user_message},
                     timeout=120.0
                 )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    if result.get("success", False):
-                        agent_response = result.get("response", "Nessuna risposta ricevuta.")
-                        await update.message.reply_text(agent_response)
-                    else:
-                        error_msg = result.get("error", "Errore sconosciuto")
-                        await update.message.reply_text(f"❌ Errore nel processare il messaggio: {error_msg}")
-                        logger.error(f"API error: {error_msg}")
+
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("success", False):
+                    agent_response = result.get("response", "Nessuna risposta ricevuta.")
+                    await thinking_msg.edit_text(agent_response)
                 else:
-                    await update.message.reply_text("❌ Errore nel contattare il servizio spese. Riprova più tardi.")
-                    logger.error(f"HTTP error: {response.status_code}")
+                    error_msg = result.get("error", "Errore sconosciuto")
+                    await thinking_msg.edit_text(f"❌ Errore nel processare il messaggio: {error_msg}")
+                    logger.error(f"API error: {error_msg}")
+            else:
+                await thinking_msg.edit_text("❌ Errore nel contattare il servizio spese. Riprova più tardi.")
+                logger.error(f"HTTP error: {response.status_code}")
                     
         except Exception as e:
-            await update.message.reply_text("❌ Errore interno. Riprova più tardi.")
+            if thinking_msg:
+                await thinking_msg.edit_text("❌ Errore interno. Riprova più tardi.")
+            else:
+                await update.message.reply_text("❌ Errore interno. Riprova più tardi.")
             logger.error(f"Unexpected error: {str(e)}")
 
     async def start_polling(self):
