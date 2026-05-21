@@ -7,7 +7,7 @@ _WHITESPACE_PATTERN = re.compile(r"\s+")
 
 def extract_amount(text: str) -> str | None:
     match = _AMOUNT_PATTERN.search(text.replace(",", "."))
-    return match.group() if match else None
+    return match.group().replace(".", ",") if match else None
 
 
 def extract_description(text: str) -> str:
