@@ -1,0 +1,37 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+.git
+.gitignore
+.mypy_cache
+.pytest_cache
+.DS_Store
+
+*.log
+.coverage
+.coverage.*
+.cache
+
+.env
+.env.local
+.env.*.local
+
+.docker/
+.claude/
+agentops.log
+README.md
+REFACTOR_ROADMAP.md
+build/
+dist/
+
+# Model is volume-mounted at runtime — do not bake into image
+src/colf/models/
+
+# Other services not part of the API image
+src/colf-fine-tuning/
+src/colf-telegram-bot/

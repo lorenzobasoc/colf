@@ -1,23 +1,14 @@
 [project]
 name = "colf"
 version = "0.1.0"
-description = "Add your description here"
+description = "CoLF"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.117.1",
-    "mcp>=1.16.0",
     "uvicorn>=0.37.0",
-    "httpx>=0.27.0",
-    "packaging>=24.2",
-    "mcp-google-sheets>=0.5.1",
-    "google-api-python-client>=2.150.0",
     "google-auth>=2.36.0",
     "llama-cpp-python>=0.3.2",
-    "transformers>=5.4.0",
-    "trl>=0.29.1",
-    "accelerate>=1.13.0",
-    "bitsandbytes>=0.49.2",
-    "peft>=0.18.1",
     "gspread>=6.2.1",
+    "python-dotenv>=1.0.0",
 ]
