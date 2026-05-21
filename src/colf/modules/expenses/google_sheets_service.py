@@ -14,10 +14,11 @@ def _format_input(expense_classification_json):
         
     return spese_input
 
-def inserisci_spese_agente(expense_classification_json, credentials_path="../../../../.keys/sheets_mcp_service_account.json"):
+credentials_path = "../../../../.keys/sheets_mcp_service_account.json"
+
+def add_expense(expense_classification_json):
     if not expense_classification_json:
-        print("Errore: Nessuna spesa fornita in input.")
-        return
+        raise ValueError("Errore: Nessuna spesa fornita in input.")
     
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
