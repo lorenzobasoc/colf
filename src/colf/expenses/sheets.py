@@ -40,9 +40,19 @@ def add_expense(expense: Expense, client: gspread.Client) -> None:
 
     if not worksheet.acell("A1").value:
         worksheet.update("A1:D1", [SHEET_HEADERS])
+        next_row = 2
+    else:
+        filled_rows = len(worksheet.col_values(1))
+        next_row = filled_rows + 1
 
-    worksheet.append_row(
-        [expense.day, expense.description, expense.category, expense.amount],
+    target_range = f"A{next_row}:D{next_row}"
+    
+    row_data = [[expense.day, expense.description, expense.category, expense.amount]]
+
+    worksheet.update(
+        range_name=target_range,
+        values=row_data,
         value_input_option="USER_ENTERED",
     )
-    logger.info("Expense appended to '%s' / '%s'", spreadsheet_name, expense.month)
+    
+    logger.info("Expense appended to '%s' / '%s' at row %d", spreadsheet_name, expense.month, next_row)
