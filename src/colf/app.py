@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from .config import get_settings
-from .expenses.categorizer import load_llm
+from .expenses.llm.categorizer import load_llm
 from .expenses.router import router as expenses_router
 from .expenses.sheets import create_sheets_client
 

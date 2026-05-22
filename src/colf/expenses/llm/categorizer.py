@@ -2,8 +2,8 @@ import logging
 
 from llama_cpp import Llama
 
-from ..config import Settings
-from .constants import CATEGORIES, FALLBACK_CATEGORY
+from ...config import Settings
+from ..constants import CATEGORIES, FALLBACK_CATEGORY
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ _GUIDE = """CLASSIFICATION GUIDE:
 - Coffee, cafe, spritz, beer, breakfast, aperitivo, cornetto -> Bar
 - Train, metro, bus, ticket, toll, pedaggio -> Trasporti
 - Gas, gasoline, benzina, benza, car insurance -> Auto
-- Netflix, Spotify, Amazon Prime, subscription -> Abbonamenti
+- Netflix, Spotify, Amazon Prime, Disney+, subscription, abbonamento -> Abbonamenti
 - Cinema, concert, theatre -> Intrattenimento
 - If uncertain -> Altro"""
 
