@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Clienti{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1>Clienti</h1>
+  <a href="/ui/clients/new" class="btn btn-primary">+ Nuovo cliente</a>
+</div>
+<table class="table table-hover">
+  <thead>
+    <tr><th>Ragione sociale</th><th>P.IVA</th><th>PEC</th><th>Attivo</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for c in clients %}
+    <tr>
+      <td>{{ c.ragione_sociale }}</td>
+      <td>{{ c.piva }}</td>
+      <td>{{ c.pec }}</td>
+      <td>{% if c.active %}✓{% else %}—{% endif %}</td>
+      <td><a href="/ui/clients/{{ c.id }}/edit" class="btn btn-sm btn-outline-secondary">Modifica</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="text-center text-muted">Nessun cliente</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Fatture{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1>Fatture {{ selected_anno }}</h1>
+  <a href="/ui/invoices/new" class="btn btn-primary">+ Nuova fattura</a>
+</div>
+
+<form class="row g-2 mb-4" method="get">
+  <div class="col-auto">
+    <input type="number" name="anno" class="form-control" placeholder="Anno" value="{{ selected_anno }}">
+  </div>
+  <div class="col-auto">
+    <select name="stato" class="form-select">
+      <option value="">Tutti gli stati</option>
+      {% for s in stati %}
+      <option value="{{ s }}" {% if s == selected_stato %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto">
+    <button type="submit" class="btn btn-secondary">Filtra</button>
+  </div>
+</form>
+
+<table class="table table-hover">
+  <thead>
+    <tr>
+      <th>N.</th><th>Cliente</th><th>Emissione</th><th>Scadenza</th>
+      <th>Imponibile</th><th>Totale</th><th>Stato</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for inv in invoices %}
+    <tr>
+      <td>{{ inv.numero }}/{{ inv.anno }}</td>
+      <td>{{ inv.ragione_sociale }}</td>
+      <td>{{ inv.data_emissione }}</td>
+      <td>{{ inv.data_scadenza }}</td>
+      <td>€ {{ inv.importo }}</td>
+      <td>€ {{ inv.totale }}</td>
+      <td><span class="badge bg-secondary">{{ inv.stato }}</span></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="text-center text-muted">Nessuna fattura</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

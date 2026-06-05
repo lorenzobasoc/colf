@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{% if client %}Modifica cliente{% else %}Nuovo cliente{% endif %}{% endblock %}
+{% block content %}
+<h1 class="mb-4">{% if client %}Modifica {{ client.ragione_sociale }}{% else %}Nuovo cliente{% endif %}</h1>
+<form method="post" action="{{ action }}">
+  {% macro field(name, label, value="", type="text", required=True) %}
+  <div class="mb-3">
+    <label class="form-label">{{ label }}</label>
+    <input type="{{ type }}" name="{{ name }}" class="form-control"
+           value="{{ value }}" {% if required %}required{% endif %}>
+  </div>
+  {% endmacro %}
+
+  {{ field("ragione_sociale", "Ragione sociale", client.ragione_sociale if client else "") }}
+  {{ field("piva", "Partita IVA", client.piva if client else "") }}
+  {{ field("codice_fiscale", "Codice fiscale", client.codice_fiscale if client else "") }}
+  {{ field("pec", "PEC", client.pec if client else "", type="email") }}
+  {{ field("codice_destinatario", "Codice destinatario SdI", client.codice_destinatario if client else "") }}
+  {{ field("indirizzo", "Indirizzo", client.indirizzo if client else "") }}
+  {{ field("cap", "CAP", client.cap if client else "") }}
+  {{ field("comune", "Comune", client.comune if client else "") }}
+  {{ field("provincia", "Provincia (2 lettere)", client.provincia if client else "") }}
+  {{ field("nazione", "Nazione", client.nazione if client else "IT") }}
+  {{ field("tariffa_oraria", "Tariffa oraria (€)", client.tariffa_oraria if client else "0.00") }}
+  {{ field("descrizione_default", "Descrizione default fattura", client.descrizione_default if client else "", required=False) }}
+  {{ field("giorni_pagamento_default", "Giorni pagamento default", client.giorni_pagamento_default if client else "30", type="number") }}
+
+  <div class="mb-3">
+    <label class="form-label">Note</label>
+    <textarea name="note" class="form-control" rows="2">{{ client.note if client else "" }}</textarea>
+  </div>
+
+  {% if client %}
+  <div class="mb-3 form-check">
+    <input type="checkbox" name="active" id="active" class="form-check-input"
+           {% if client.active %}checked{% endif %}>
+    <label class="form-check-label" for="active">Attivo</label>
+  </div>
+  {% endif %}
+
+  <button type="submit" class="btn btn-primary">Salva</button>
+  <a href="/ui/clients" class="btn btn-secondary ms-2">Annulla</a>
+</form>
+{% endblock %}
