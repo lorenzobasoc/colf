@@ -42,7 +42,7 @@ async def service_create_client(payload: ClientCreate, *, db: aiosqlite.Connecti
 async def service_update_client(
     client_id: int, payload: ClientUpdate, *, db: aiosqlite.Connection
 ) -> Client | None:
-    data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    data = payload.model_dump(exclude_none=True)
     if not data:
         return await get_client_by_id(db, client_id)
     return await update_client(db, client_id, data)
