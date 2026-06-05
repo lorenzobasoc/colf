@@ -8,7 +8,7 @@ from .domain import Client, Invoice
 
 
 def _el(parent: etree._Element, tag: str, text: str | None = None) -> etree._Element:
-    el = etree.SubElement(parent, f"{{{FATTURA_NS}}}{tag}")
+    el = etree.SubElement(parent, tag)  # figli non qualificati (elementFormDefault=unqualified)
     if text is not None:
         el.text = text
     return el
@@ -19,7 +19,7 @@ def _fmt(value: Decimal) -> str:
 
 
 def build_fattura_xml(invoice: Invoice, client: Client, settings: Settings) -> bytes:
-    nsmap = {None: FATTURA_NS}
+    nsmap = {"p": FATTURA_NS}
     root = etree.Element(f"{{{FATTURA_NS}}}FatturaElettronica", nsmap=nsmap)
     root.set("versione", FATTURA_VERSIONE)
 
