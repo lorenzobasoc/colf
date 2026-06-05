@@ -1,6 +1,7 @@
-import os
 import asyncio
 import logging
+import os
+from datetime import date
 
 import httpx
 from dotenv import load_dotenv
@@ -8,6 +9,7 @@ from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
+    CommandHandler,
     ContextTypes,
     MessageHandler,
     filters,
@@ -20,6 +22,12 @@ from expense_card import (
     format_card,
     main_keyboard,
     parse_date_input,
+)
+from invoice_card import (
+    INV_FIELD_PROMPTS,
+    format_invoice_card,
+    invoice_back_keyboard,
+    invoice_main_keyboard,
 )
 
 load_dotenv()
@@ -46,11 +54,22 @@ class TelegramBot:
             MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message)
         )
         self.application.add_handler(CallbackQueryHandler(self.handle_callback))
+        self.application.add_handler(CommandHandler("fattura", self.handle_fattura))
+        self.application.add_handler(CommandHandler("clienti", self.handle_clienti))
+        self.application.add_handler(CommandHandler("scadenze", self.handle_scadenze))
+        self.application.add_handler(CommandHandler("stato", self.handle_stato))
 
     @staticmethod
     def _clear(context: ContextTypes.DEFAULT_TYPE) -> None:
         for key in ("draft", "categories", "card_message_id", "awaiting_field"):
             context.chat_data.pop(key, None)
+
+    @staticmethod
+    def _clear_invoice(context: ContextTypes.DEFAULT_TYPE) -> None:
+        for key in ("invoice_draft", "invoice_card_message_id", "invoice_awaiting_field"):
+            context.chat_data.pop(key, None)
+
+    # ── Expense handlers (unchanged) ──────────────────────────────────────────
 
     async def handle_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -58,19 +77,26 @@ class TelegramBot:
         text = update.message.text
         chat_data = context.chat_data
 
-        # 1. In attesa del valore di un campo da correggere.
+        if chat_data.get("invoice_awaiting_field"):
+            await self._apply_invoice_field(update, context, text)
+            return
+
         if chat_data.get("awaiting_field"):
             await self._apply_field_value(update, context, text)
             return
 
-        # 2. Bozza in sospeso: blocca i nuovi messaggi di spesa.
         if chat_data.get("draft"):
             await update.message.reply_text(
                 "⏳ Conferma o annulla prima la spesa in sospeso."
             )
             return
 
-        # 3. Nuova spesa: parsing.
+        if chat_data.get("invoice_draft"):
+            await update.message.reply_text(
+                "⏳ Conferma o annulla prima la fattura in sospeso."
+            )
+            return
+
         await self._start_draft(update, context, text)
 
     async def _start_draft(
@@ -119,7 +145,7 @@ class TelegramBot:
                 await update.message.reply_text(
                     "⚠️ Formato non valido. Usa gg/mm (es. 05/03)."
                 )
-                return  # awaiting_field resta impostato
+                return
             draft["day"], draft["month"] = parsed
 
         context.chat_data["awaiting_field"] = None
@@ -130,21 +156,203 @@ class TelegramBot:
             reply_markup=main_keyboard(),
         )
 
+    # ── Invoice command handlers ───────────────────────────────────────────────
+
+    async def handle_fattura(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        args = context.args
+        if not args:
+            await update.message.reply_text(
+                "Usa: /fattura <nome cliente>\nEs: /fattura Acme"
+            )
+            return
+
+        query = " ".join(args)
+        thinking = await update.message.reply_text(f"Cerco cliente '{query}'… 🔍")
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.api_base_url}/api/invoices/parse",
+                    json={"query": query},
+                    timeout=30.0,
+                )
+            response.raise_for_status()
+            result = response.json()
+        except Exception as error:
+            logger.error("Invoice parse failed: %s", error)
+            await thinking.edit_text("❌ Errore nella ricerca del cliente. Riprova.")
+            return
+
+        if not result.get("success"):
+            await thinking.edit_text(
+                f"❌ {result.get('error', 'Cliente non trovato.')}"
+            )
+            return
+
+        context.chat_data["invoice_draft"] = result["draft"]
+        context.chat_data["invoice_card_message_id"] = thinking.message_id
+        await thinking.edit_text(
+            format_invoice_card(result["draft"]), reply_markup=invoice_main_keyboard()
+        )
+
+    async def handle_clienti(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_base_url}/api/clients",
+                    params={"active_only": "true"},
+                    timeout=10.0,
+                )
+            response.raise_for_status()
+            clients = response.json()
+        except Exception as error:
+            logger.error("Clients list failed: %s", error)
+            await update.message.reply_text("❌ Errore nel recuperare i clienti.")
+            return
+
+        if not clients:
+            await update.message.reply_text("Nessun cliente attivo registrato.")
+            return
+
+        lines = ["👥 Clienti attivi:\n"]
+        for c in clients:
+            lines.append(f"• {c['ragione_sociale']} — P.IVA {c['piva']}")
+        await update.message.reply_text("\n".join(lines))
+
+    async def handle_scadenze(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_base_url}/api/invoices/expiring",
+                    timeout=10.0,
+                )
+            response.raise_for_status()
+            invoices = response.json()
+        except Exception as error:
+            logger.error("Expiring invoices failed: %s", error)
+            await update.message.reply_text("❌ Errore nel recuperare le scadenze.")
+            return
+
+        if not invoices:
+            await update.message.reply_text("Nessuna fattura in scadenza nei prossimi 7 giorni.")
+            return
+
+        lines = ["⏰ Fatture in scadenza:\n"]
+        for inv in invoices:
+            lines.append(
+                f"• n.{inv['numero']}/{inv['anno']} — {inv['ragione_sociale']} — "
+                f"€ {inv['totale']} — scade {inv['data_scadenza']} — {inv['stato']}"
+            )
+        await update.message.reply_text("\n".join(lines))
+
+    async def handle_stato(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        args = context.args
+        if not args or not args[0].isdigit():
+            await update.message.reply_text(
+                "Usa: /stato <numero fattura>\nEs: /stato 73"
+            )
+            return
+
+        numero = int(args[0])
+        anno = date.today().year
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_base_url}/api/invoices/{numero}",
+                    params={"anno": anno},
+                    timeout=10.0,
+                )
+            response.raise_for_status()
+            inv = response.json()
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code == 404:
+                await update.message.reply_text(
+                    f"Fattura n.{numero}/{anno} non trovata."
+                )
+            else:
+                await update.message.reply_text("❌ Errore nel recuperare la fattura.")
+            return
+        except Exception as error:
+            logger.error("Invoice status failed: %s", error)
+            await update.message.reply_text("❌ Errore nel recuperare la fattura.")
+            return
+
+        await update.message.reply_text(
+            f"📄 Fattura n.{inv['numero']}/{inv['anno']}\n"
+            f"Cliente: {inv['ragione_sociale']}\n"
+            f"Descrizione: {inv['descrizione']}\n"
+            f"Importo: € {inv['importo']} + bollo\n"
+            f"Totale: € {inv['totale']}\n"
+            f"Emissione: {inv['data_emissione']}\n"
+            f"Scadenza: {inv['data_scadenza']}\n"
+            f"Stato: {inv['stato']}\n"
+            f"Progressivo: {inv['progressivo_invio']}"
+        )
+
+    # ── Invoice field editing ─────────────────────────────────────────────────
+
+    async def _apply_invoice_field(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
+    ) -> None:
+        field = context.chat_data["invoice_awaiting_field"]
+        draft = context.chat_data["invoice_draft"]
+
+        if field == "amount":
+            draft["importo"] = text.strip().replace(",", ".")
+        elif field == "description":
+            draft["descrizione"] = text.strip()
+        elif field == "date":
+            stripped = text.strip()
+            try:
+                date.fromisoformat(stripped)
+                draft["data_emissione"] = stripped
+            except ValueError:
+                await update.message.reply_text(
+                    "⚠️ Formato non valido. Usa YYYY-MM-DD (es. 2026-06-01)."
+                )
+                return
+        elif field == "giorni":
+            if not text.strip().isdigit():
+                await update.message.reply_text("⚠️ Inserisci un numero intero (es. 30).")
+                return
+            draft["giorni_pagamento"] = int(text.strip())
+
+        context.chat_data["invoice_awaiting_field"] = None
+        await context.bot.edit_message_text(
+            chat_id=update.effective_chat.id,
+            message_id=context.chat_data["invoice_card_message_id"],
+            text=format_invoice_card(draft),
+            reply_markup=invoice_main_keyboard(),
+        )
+
+    # ── Callback router ───────────────────────────────────────────────────────
+
     async def handle_callback(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
         query = update.callback_query
         data = query.data
+
+        if data.startswith("inv_"):
+            await self._handle_invoice_callback(update, context)
+            return
+
+        # ── Expense callbacks (unchanged) ──────────────────────────────────
         chat_data = context.chat_data
 
-        # Bottone di una scheda vecchia, già risolta.
         if not chat_data.get("draft"):
             await query.answer("Questa spesa non è più in sospeso.", show_alert=True)
             await query.edit_message_reply_markup(reply_markup=None)
             return
 
         await query.answer()
-        # Qualunque callback annulla una correzione campo in sospeso.
         chat_data["awaiting_field"] = None
         draft = chat_data["draft"]
 
@@ -177,6 +385,75 @@ class TelegramBot:
             await query.edit_message_text(
                 format_card(draft), reply_markup=main_keyboard()
             )
+
+    async def _handle_invoice_callback(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        data = query.data
+        chat_data = context.chat_data
+
+        if not chat_data.get("invoice_draft"):
+            await query.answer("Questa fattura non è più in sospeso.", show_alert=True)
+            await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        await query.answer()
+        chat_data["invoice_awaiting_field"] = None
+        draft = chat_data["invoice_draft"]
+
+        if data == "inv_confirm":
+            await self._commit_invoice(update, context)
+        elif data == "inv_cancel":
+            self._clear_invoice(context)
+            await query.edit_message_text("Fattura annullata.")
+        elif data == "inv_back":
+            await query.edit_message_text(
+                format_invoice_card(draft), reply_markup=invoice_main_keyboard()
+            )
+        elif data.startswith("inv_edit:"):
+            field = data[len("inv_edit:"):]
+            chat_data["invoice_awaiting_field"] = field
+            await query.edit_message_text(
+                f"{format_invoice_card(draft)}\n\n{INV_FIELD_PROMPTS[field]}",
+                reply_markup=invoice_back_keyboard(),
+            )
+
+    async def _commit_invoice(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        query = update.callback_query
+        draft = context.chat_data["invoice_draft"]
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.api_base_url}/api/invoices/commit",
+                    json=draft,
+                    timeout=30.0,
+                )
+            response.raise_for_status()
+            result = response.json()
+        except Exception as error:
+            logger.error("Invoice commit failed: %s", error)
+            await query.edit_message_text(
+                f"{format_invoice_card(draft)}\n\n❌ Errore nel salvare. Riprova con Conferma.",
+                reply_markup=invoice_main_keyboard(),
+            )
+            return
+
+        if not result.get("success"):
+            error = result.get("error", "Errore sconosciuto")
+            logger.error("Invoice commit error: %s", error)
+            await query.edit_message_text(
+                f"{format_invoice_card(draft)}\n\n❌ {error}\nRiprova con Conferma.",
+                reply_markup=invoice_main_keyboard(),
+            )
+            return
+
+        self._clear_invoice(context)
+        await query.edit_message_text(f"✅ {result['response']}")
+
+    # ── Expense commit (unchanged) ────────────────────────────────────────────
 
     async def _commit(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -214,7 +491,6 @@ class TelegramBot:
         await query.edit_message_text(f"✅ {result['response']}")
 
     async def start_polling(self):
-        """Start the bot with polling."""
         logger.info("Starting Telegram bot...")
         await self.application.initialize()
         await self.application.start()
@@ -231,5 +507,4 @@ class TelegramBot:
             await self.application.shutdown()
 
     def run(self):
-        """Run the bot using asyncio."""
         asyncio.run(self.start_polling())
