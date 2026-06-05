@@ -6,7 +6,7 @@ from pathlib import Path
 import aiosqlite
 
 from ..config import Settings
-from .constants import BOLLO_IMPORTO, InvoiceStato
+from .constants import InvoiceStato
 from .domain import Client, Invoice
 from .pec_sender import send_via_pec
 from .repository import (
@@ -88,7 +88,7 @@ async def commit_invoice(
     anno = data_emissione.year
     numero = await get_next_numero(db, anno)
     importo = Decimal(draft.importo.replace(",", "."))
-    totale = importo + BOLLO_IMPORTO
+    totale = importo
     progressivo_invio = f"{anno}{numero:04d}"
 
     invoice = await insert_invoice(db, {
