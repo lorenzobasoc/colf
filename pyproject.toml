@@ -17,3 +17,6 @@ dependencies = [
     "jinja2>=3.1.0",
     "python-multipart>=0.0.20",
 ]
+
+[dependency-groups]
+dev = ["pytest>=8.0"]
