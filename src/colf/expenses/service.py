@@ -17,7 +17,7 @@ from .sharing import (
     split_names_fallback,
     strip_share_clause,
 )
-from .sheets import add_expense
+from .sheets import add_debtors, add_expense
 from .text_parsing import extract_amount, extract_description
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,26 @@ def parse_expense(message: str, *, llm: Llama) -> Expense:
 def commit_expense(expense: Expense, *, sheets_client: gspread.Client) -> str:
     add_expense(expense, sheets_client)
     logger.info("Recorded expense: %s", expense)
-    return (
+    summary = (
         f"Spesa registrata: {expense.description or 'senza descrizione'} "
         f"- {expense.category} - {expense.amount or 'importo non rilevato'} "
         f"({expense.day} {expense.month})"
     )
+    if not (expense.participants and expense.total_amount):
+        return summary
+
+    quota, _ = compute_shares(
+        parse_amount(expense.total_amount), len(expense.participants)
+    )
+    debts = {name: quota for name in expense.participants}
+    try:
+        add_debtors(expense.month, debts, sheets_client)
+    except Exception as error:
+        logger.exception("Failed to update debtors block")
+        return (
+            f"{summary}\n⚠️ Spesa registrata, ma debitori NON aggiornati: {error}"
+        )
+    debtors_text = ", ".join(
+        f"{name} {format_amount(amount)}" for name, amount in debts.items()
+    )
+    return f"{summary}\nDebitori aggiornati: {debtors_text}"
