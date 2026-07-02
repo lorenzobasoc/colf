@@ -11,6 +11,8 @@ class ExpenseDraft(BaseModel):
     description: str
     category: str
     amount: str
+    total_amount: str | None = None
+    participants: list[str] = []
 
 
 class CategoryOption(BaseModel):

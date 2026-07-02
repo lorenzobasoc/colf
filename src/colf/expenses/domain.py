@@ -8,3 +8,5 @@ class Expense:
     description: str
     category: str
     amount: str
+    total_amount: str | None = None
+    participants: tuple[str, ...] = ()

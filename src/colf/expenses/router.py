@@ -52,6 +52,8 @@ def commit_message(
             description=draft.description,
             category=draft.category,
             amount=draft.amount,
+            total_amount=draft.total_amount,
+            participants=tuple(draft.participants),
         )
         summary = commit_expense(expense, sheets_client=sheets_client)
         return CommitResponse(response=summary, success=True)
