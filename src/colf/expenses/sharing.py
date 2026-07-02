@@ -94,3 +94,38 @@ def compute_shares(total: Decimal, n_debtors: int) -> tuple[Decimal, Decimal]:
     quota = (total / n).quantize(_CENT, rounding=ROUND_HALF_UP)
     user_share = total - quota * n_debtors
     return quota, user_share
+
+
+def merge_debtors(
+    existing: list[list[str]], debts: dict[str, Decimal]
+) -> list[list[str]]:
+    """Fonde i nuovi debiti nel blocco debitori esistente [[nome, importo], ...].
+
+    Ritorna il blocco aggiornato, da riscrivere per intero a partire da G25.
+    Le righe vuote vengono compattate. Solleva ValueError se la cella importo
+    di un nome coinvolto nei nuovi debiti non è numerica."""
+    rows: list[list[str]] = []
+    index: dict[str, int] = {}
+    for row in existing:
+        name = (row[0] if row else "").strip()
+        if not name:
+            continue
+        amount = (row[1] if len(row) > 1 else "").strip()
+        index[name.lower()] = len(rows)
+        rows.append([name, amount])
+
+    for name, quota in debts.items():
+        key = name.lower()
+        if key in index:
+            i = index[key]
+            try:
+                current = parse_amount(rows[i][1]) if rows[i][1] else Decimal("0")
+            except ArithmeticError as error:
+                raise ValueError(
+                    f"Importo non numerico per '{rows[i][0]}': {rows[i][1]!r}"
+                ) from error
+            rows[i][1] = format_amount(current + quota)
+        else:
+            index[key] = len(rows)
+            rows.append([name, format_amount(quota)])
+    return rows

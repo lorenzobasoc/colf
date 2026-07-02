@@ -152,3 +152,53 @@ class TestComputeShares:
         quota, user = compute_shares(Decimal("15"), 1)
         assert quota == Decimal("7.50")
         assert user == Decimal("7.50")
+
+
+from colf.expenses.sharing import merge_debtors
+
+
+class TestMergeDebtors:
+    def test_blocco_vuoto(self):
+        result = merge_debtors([], {"Giulio": Decimal("10"), "Bea": Decimal("10")})
+        assert result == [["Giulio", "10"], ["Bea", "10"]]
+
+    def test_nome_esistente_somma(self):
+        existing = [["Giulio", "10"], ["Bea", "10"]]
+        result = merge_debtors(existing, {"Giulio": Decimal("5")})
+        assert result == [["Giulio", "15"], ["Bea", "10"]]
+
+    def test_match_case_insensitive(self):
+        existing = [["giulio", "10"]]
+        result = merge_debtors(existing, {"Giulio": Decimal("2.50")})
+        assert result == [["giulio", "12,50"]]
+
+    def test_nuovo_nome_in_coda(self):
+        existing = [["Giulio", "10"]]
+        result = merge_debtors(existing, {"Marco": Decimal("7")})
+        assert result == [["Giulio", "10"], ["Marco", "7"]]
+
+    def test_importo_esistente_con_virgola(self):
+        existing = [["Bea", "6,67"]]
+        result = merge_debtors(existing, {"Bea": Decimal("6.67")})
+        assert result == [["Bea", "13,34"]]
+
+    def test_riga_ragged_senza_importo(self):
+        # gspread può restituire righe senza colonna H: nome con importo vuoto
+        existing = [["Giulio"]]
+        result = merge_debtors(existing, {"Giulio": Decimal("5")})
+        assert result == [["Giulio", "5"]]
+
+    def test_importo_non_numerico_su_nome_coinvolto(self):
+        existing = [["Giulio", "boh"]]
+        with pytest.raises(ValueError, match="Giulio"):
+            merge_debtors(existing, {"Giulio": Decimal("5")})
+
+    def test_importo_non_numerico_su_nome_non_coinvolto_ok(self):
+        existing = [["Altro", "testo"], ["Bea", "10"]]
+        result = merge_debtors(existing, {"Bea": Decimal("5")})
+        assert result == [["Altro", "testo"], ["Bea", "15"]]
+
+    def test_righe_vuote_compattate(self):
+        existing = [["Giulio", "10"], [], ["Bea", "10"]]
+        result = merge_debtors(existing, {"Marco": Decimal("3")})
+        assert result == [["Giulio", "10"], ["Bea", "10"], ["Marco", "3"]]
