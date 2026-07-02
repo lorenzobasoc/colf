@@ -95,3 +95,60 @@ class TestSplitNamesFallback:
 
     def test_vuoto(self):
         assert split_names_fallback("") == []
+
+
+from decimal import Decimal, InvalidOperation
+
+import pytest
+
+from colf.expenses.sharing import compute_shares, format_amount, parse_amount
+
+
+class TestParseAmount:
+    def test_virgola(self):
+        assert parse_amount("42,50") == Decimal("42.50")
+
+    def test_punto(self):
+        assert parse_amount("6.67") == Decimal("6.67")
+
+    def test_intero_con_euro(self):
+        assert parse_amount("€ 30") == Decimal("30")
+
+    def test_non_numerico_solleva(self):
+        with pytest.raises(InvalidOperation):
+            parse_amount("boh")
+
+
+class TestFormatAmount:
+    def test_intero_senza_decimali(self):
+        assert format_amount(Decimal("10.00")) == "10"
+
+    def test_decimali_con_virgola(self):
+        assert format_amount(Decimal("6.67")) == "6,67"
+
+    def test_un_decimale_padding(self):
+        assert format_amount(Decimal("6.6")) == "6,60"
+
+
+class TestComputeShares:
+    def test_divisione_esatta(self):
+        # 30 in 3 (utente + 2 debitori) → 10 a testa
+        quota, user = compute_shares(Decimal("30"), 2)
+        assert quota == Decimal("10.00")
+        assert user == Decimal("10.00")
+
+    def test_resto_assorbito_dallutente(self):
+        # 20 in 3 → debitori 6,67 — utente 6,66
+        quota, user = compute_shares(Decimal("20"), 2)
+        assert quota == Decimal("6.67")
+        assert user == Decimal("6.66")
+
+    def test_somma_quote_uguale_totale(self):
+        for total, n in [("20", 2), ("100", 3), ("7,77", 4), ("0,05", 2)]:
+            quota, user = compute_shares(parse_amount(total), n)
+            assert quota * n + user == parse_amount(total)
+
+    def test_un_debitore(self):
+        quota, user = compute_shares(Decimal("15"), 1)
+        assert quota == Decimal("7.50")
+        assert user == Decimal("7.50")

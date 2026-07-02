@@ -1,6 +1,7 @@
 """Logica pura per le spese condivise: nessun I/O, nessuna chiamata LLM."""
 import re
 from dataclasses import dataclass
+from decimal import Decimal, ROUND_HALF_UP
 
 # Clausola di condivisione: matcha fino a fine messaggio.
 # Varianti: "da dividere con", "dividere con", "diviso/divisa con",
@@ -68,3 +69,28 @@ def split_names_fallback(tail: str) -> list[str]:
         seen.add(key)
         names.append(name.capitalize())
     return names
+
+
+_CENT = Decimal("0.01")
+
+
+def parse_amount(raw: str) -> Decimal:
+    """Parsa un importo in formato italiano ("6,67") o con punto ("6.67").
+    Solleva decimal.InvalidOperation se non numerico."""
+    cleaned = raw.replace("€", "").replace(" ", "").replace(",", ".")
+    return Decimal(cleaned)
+
+
+def format_amount(value: Decimal) -> str:
+    if value == value.to_integral_value():
+        return str(value.quantize(Decimal("1")))
+    return str(value.quantize(_CENT)).replace(".", ",")
+
+
+def compute_shares(total: Decimal, n_debtors: int) -> tuple[Decimal, Decimal]:
+    """Ritorna (quota_debitore, quota_utente): quota debitore arrotondata a
+    2 decimali, l'utente assorbe i centesimi di resto."""
+    n = n_debtors + 1
+    quota = (total / n).quantize(_CENT, rounding=ROUND_HALF_UP)
+    user_share = total - quota * n_debtors
+    return quota, user_share
