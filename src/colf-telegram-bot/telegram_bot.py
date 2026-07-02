@@ -22,6 +22,8 @@ from expense_card import (
     format_card,
     main_keyboard,
     parse_date_input,
+    parse_participants_input,
+    recalc_share,
 )
 from invoice_card import (
     INV_FIELD_PROMPTS,
@@ -126,7 +128,8 @@ class TelegramBot:
         context.chat_data["categories"] = result["categories"]
         context.chat_data["card_message_id"] = thinking.message_id
         await thinking.edit_text(
-            format_card(result["draft"]), reply_markup=main_keyboard()
+            format_card(result["draft"]),
+            reply_markup=main_keyboard(bool(result["draft"].get("participants"))),
         )
 
     async def _apply_field_value(
@@ -136,7 +139,11 @@ class TelegramBot:
         draft = context.chat_data["draft"]
 
         if field == "amount":
-            draft["amount"] = text.strip()
+            if draft.get("participants"):
+                draft["total_amount"] = text.strip()
+                recalc_share(draft)
+            else:
+                draft["amount"] = text.strip()
         elif field == "description":
             draft["description"] = text.strip()
         elif field == "date":
@@ -147,13 +154,24 @@ class TelegramBot:
                 )
                 return
             draft["day"], draft["month"] = parsed
+        elif field == "participants":
+            names = parse_participants_input(text)
+            if names:
+                draft["participants"] = names
+                draft["total_amount"] = draft.get("total_amount") or draft["amount"]
+                recalc_share(draft)
+            else:
+                # torna spesa normale: l'importo pieno va in colonna Importo
+                draft["amount"] = draft.get("total_amount") or draft["amount"]
+                draft["participants"] = []
+                draft["total_amount"] = None
 
         context.chat_data["awaiting_field"] = None
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=context.chat_data["card_message_id"],
             text=format_card(draft),
-            reply_markup=main_keyboard(),
+            reply_markup=main_keyboard(bool(draft.get("participants"))),
         )
 
     # ── Invoice command handlers ───────────────────────────────────────────────
@@ -372,7 +390,8 @@ class TelegramBot:
                 draft["category"],
             )
             await query.edit_message_text(
-                format_card(draft), reply_markup=main_keyboard()
+                format_card(draft),
+                reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
         elif data.startswith("edit:"):
             field = data[len("edit:"):]
@@ -383,7 +402,8 @@ class TelegramBot:
             )
         elif data == "back":
             await query.edit_message_text(
-                format_card(draft), reply_markup=main_keyboard()
+                format_card(draft),
+                reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
 
     async def _handle_invoice_callback(
@@ -473,7 +493,7 @@ class TelegramBot:
             logger.error("Commit request failed: %s", error)
             await query.edit_message_text(
                 f"{format_card(draft)}\n\n❌ Errore nel salvare. Riprova con Conferma.",
-                reply_markup=main_keyboard(),
+                reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
             return
 
@@ -483,7 +503,7 @@ class TelegramBot:
             await query.edit_message_text(
                 f"{format_card(draft)}\n\n❌ Errore nel salvare: {error}\n"
                 "Riprova con Conferma.",
-                reply_markup=main_keyboard(),
+                reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
             return
 
