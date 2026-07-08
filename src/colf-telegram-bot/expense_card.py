@@ -73,6 +73,37 @@ def parse_participants_input(text: str) -> list[str]:
     return names
 
 
+def apply_field_value(draft: dict, field: str, text: str) -> str | None:
+    """Applica il valore inserito dall'utente al campo `field` del draft,
+    mutandolo in place. Ritorna un messaggio di errore se l'input non è
+    valido (draft non modificato), altrimenti None."""
+    if field == "amount":
+        if draft.get("participants"):
+            draft["total_amount"] = text.strip()
+            recalc_share(draft)
+        else:
+            draft["amount"] = text.strip()
+    elif field == "description":
+        draft["description"] = text.strip()
+    elif field == "date":
+        parsed = parse_date_input(text)
+        if parsed is None:
+            return "⚠️ Formato non valido. Usa gg/mm (es. 05/03)."
+        draft["day"], draft["month"] = parsed
+    elif field == "participants":
+        names = parse_participants_input(text)
+        if names:
+            draft["participants"] = names
+            draft["total_amount"] = draft.get("total_amount") or draft["amount"]
+            recalc_share(draft)
+        else:
+            # torna spesa normale: l'importo pieno va in colonna Importo
+            draft["amount"] = draft.get("total_amount") or draft["amount"]
+            draft["participants"] = []
+            draft["total_amount"] = None
+    return None
+
+
 def format_card(draft: dict) -> str:
     participants = draft.get("participants") or []
     if not participants:

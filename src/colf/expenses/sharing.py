@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 # Varianti: "da dividere con", "dividere con", "diviso/divisa con",
 # "da dividere in parti uguali con".
 _SHARE_CLAUSE = re.compile(
-    r"\s*(?:da\s+)?divi(?:dere|so|sa)(?:\s+in\s+parti\s+uguali)?\s+con\s+(?P<tail>.+?)\s*$",
+    r"\s*\b(?:da\s+)?divi(?:dere|so|sa)(?:\s+in\s+parti\s+uguali)?\s+con\s+(?P<tail>.+?)\s*$",
     re.IGNORECASE,
 )
 

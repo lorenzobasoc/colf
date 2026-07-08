@@ -17,13 +17,11 @@ from telegram.ext import (
 
 from expense_card import (
     FIELD_PROMPTS,
+    apply_field_value,
     back_only_keyboard,
     category_keyboard,
     format_card,
     main_keyboard,
-    parse_date_input,
-    parse_participants_input,
-    recalc_share,
 )
 from invoice_card import (
     INV_FIELD_PROMPTS,
@@ -138,33 +136,10 @@ class TelegramBot:
         field = context.chat_data["awaiting_field"]
         draft = context.chat_data["draft"]
 
-        if field == "amount":
-            if draft.get("participants"):
-                draft["total_amount"] = text.strip()
-                recalc_share(draft)
-            else:
-                draft["amount"] = text.strip()
-        elif field == "description":
-            draft["description"] = text.strip()
-        elif field == "date":
-            parsed = parse_date_input(text)
-            if parsed is None:
-                await update.message.reply_text(
-                    "⚠️ Formato non valido. Usa gg/mm (es. 05/03)."
-                )
-                return
-            draft["day"], draft["month"] = parsed
-        elif field == "participants":
-            names = parse_participants_input(text)
-            if names:
-                draft["participants"] = names
-                draft["total_amount"] = draft.get("total_amount") or draft["amount"]
-                recalc_share(draft)
-            else:
-                # torna spesa normale: l'importo pieno va in colonna Importo
-                draft["amount"] = draft.get("total_amount") or draft["amount"]
-                draft["participants"] = []
-                draft["total_amount"] = None
+        error = apply_field_value(draft, field, text)
+        if error is not None:
+            await update.message.reply_text(error)
+            return
 
         context.chat_data["awaiting_field"] = None
         await context.bot.edit_message_text(

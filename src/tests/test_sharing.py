@@ -39,6 +39,11 @@ class TestExtractShareClause:
         # "con" da solo NON è un trigger: "cena con Giulio" è una spesa normale
         assert extract_share_clause("Cena con Giulio 20") is None
 
+    def test_condividere_non_matcha_a_meta_parola(self):
+        # "condividere" contiene "divi..." ma non deve matchare a metà parola,
+        # altrimenti "con" residuo di "condividere" resta appiccicato al testo estratto
+        assert extract_share_clause("Cena 20 da condividere con Beatrice") is None
+
 
 class TestStripShareClause:
     def test_rimuove_clausola(self):
