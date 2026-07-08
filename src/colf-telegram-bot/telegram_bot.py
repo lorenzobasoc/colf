@@ -460,6 +460,20 @@ class TelegramBot:
                 reply_markup=invoice_back_keyboard(),
             )
 
+    async def _finalize_card(self, query, text, reply_markup=None):
+        """Chiude la card corrente e invia il risultato come nuovo messaggio.
+
+        Serve a far scattare la notifica push: un edit non la genera. Il commit
+        può richiedere tempo, quindi se l'utente ha lasciato la chat questo lo
+        avvisa che l'operazione è conclusa. Ritorna il nuovo messaggio così il
+        chiamante può aggiornare l'id della card in caso di errore ritentabile.
+        """
+        try:
+            await query.message.delete()
+        except Exception as delete_error:
+            logger.debug("Could not delete card message: %s", delete_error)
+        return await query.message.chat.send_message(text, reply_markup=reply_markup)
+
     async def _commit_invoice(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -477,23 +491,27 @@ class TelegramBot:
             result = response.json()
         except Exception as error:
             logger.error("Invoice commit failed: %s", error)
-            await query.edit_message_text(
+            card = await self._finalize_card(
+                query,
                 f"{format_invoice_card(draft)}\n\n❌ Errore nel salvare. Riprova con Conferma.",
                 reply_markup=invoice_main_keyboard(),
             )
+            context.chat_data["invoice_card_message_id"] = card.message_id
             return
 
         if not result.get("success"):
             error = result.get("error", "Errore sconosciuto")
             logger.error("Invoice commit error: %s", error)
-            await query.edit_message_text(
+            card = await self._finalize_card(
+                query,
                 f"{format_invoice_card(draft)}\n\n❌ {error}\nRiprova con Conferma.",
                 reply_markup=invoice_main_keyboard(),
             )
+            context.chat_data["invoice_card_message_id"] = card.message_id
             return
 
         self._clear_invoice(context)
-        await query.edit_message_text(f"✅ {result['response']}")
+        await self._finalize_card(query, f"✅ {result['response']}")
 
     # ── Expense commit (unchanged) ────────────────────────────────────────────
 
@@ -514,24 +532,28 @@ class TelegramBot:
             result = response.json()
         except Exception as error:
             logger.error("Commit request failed: %s", error)
-            await query.edit_message_text(
+            card = await self._finalize_card(
+                query,
                 f"{format_card(draft)}\n\n❌ Errore nel salvare. Riprova con Conferma.",
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
+            context.chat_data["card_message_id"] = card.message_id
             return
 
         if not result.get("success"):
             error = result.get("error", "Errore sconosciuto")
             logger.error("Commit error: %s", error)
-            await query.edit_message_text(
+            card = await self._finalize_card(
+                query,
                 f"{format_card(draft)}\n\n❌ Errore nel salvare: {error}\n"
                 "Riprova con Conferma.",
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
+            context.chat_data["card_message_id"] = card.message_id
             return
 
         self._clear(context)
-        await query.edit_message_text(f"✅ {result['response']}")
+        await self._finalize_card(query, f"✅ {result['response']}")
 
     async def start_polling(self):
         logger.info("Starting Telegram bot...")
