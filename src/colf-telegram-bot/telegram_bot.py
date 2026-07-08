@@ -99,6 +99,19 @@ class TelegramBot:
 
         await self._start_draft(update, context, text)
 
+    async def _replace_placeholder(self, placeholder, update, text, reply_markup=None):
+        """Sostituisce il messaggio placeholder con uno nuovo.
+
+        Modificare un messaggio (edit) non genera una notifica push su Telegram:
+        per far arrivare l'avviso sul telefono il risultato va inviato come nuovo
+        messaggio. Cancella il placeholder e invia una reply fresca.
+        """
+        try:
+            await placeholder.delete()
+        except Exception as delete_error:
+            logger.debug("Could not delete placeholder message: %s", delete_error)
+        return await update.message.reply_text(text, reply_markup=reply_markup)
+
     async def _start_draft(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
     ) -> None:
@@ -114,21 +127,27 @@ class TelegramBot:
             result = response.json()
         except Exception as error:
             logger.error("Parse request failed: %s", error)
-            await thinking.edit_text("❌ Errore nel processare il messaggio. Riprova.")
+            await self._replace_placeholder(
+                thinking, update, "❌ Errore nel processare il messaggio. Riprova."
+            )
             return
 
         if not result.get("success"):
             logger.error("Parse error: %s", result.get("error"))
-            await thinking.edit_text("❌ Errore nel processare il messaggio. Riprova.")
+            await self._replace_placeholder(
+                thinking, update, "❌ Errore nel processare il messaggio. Riprova."
+            )
             return
 
         context.chat_data["draft"] = result["draft"]
         context.chat_data["categories"] = result["categories"]
-        context.chat_data["card_message_id"] = thinking.message_id
-        await thinking.edit_text(
+        card = await self._replace_placeholder(
+            thinking,
+            update,
             format_card(result["draft"]),
             reply_markup=main_keyboard(bool(result["draft"].get("participants"))),
         )
+        context.chat_data["card_message_id"] = card.message_id
 
     async def _apply_field_value(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, text: str
@@ -184,20 +203,25 @@ class TelegramBot:
             result = response.json()
         except Exception as error:
             logger.error("Invoice parse failed: %s", error)
-            await thinking.edit_text("❌ Errore nella ricerca del cliente. Riprova.")
+            await self._replace_placeholder(
+                thinking, update, "❌ Errore nella ricerca del cliente. Riprova."
+            )
             return
 
         if not result.get("success"):
-            await thinking.edit_text(
-                f"❌ {result.get('error', 'Cliente non trovato.')}"
+            await self._replace_placeholder(
+                thinking, update, f"❌ {result.get('error', 'Cliente non trovato.')}"
             )
             return
 
         context.chat_data["invoice_draft"] = result["draft"]
-        context.chat_data["invoice_card_message_id"] = thinking.message_id
-        await thinking.edit_text(
-            format_invoice_card(result["draft"]), reply_markup=invoice_main_keyboard()
+        card = await self._replace_placeholder(
+            thinking,
+            update,
+            format_invoice_card(result["draft"]),
+            reply_markup=invoice_main_keyboard(),
         )
+        context.chat_data["invoice_card_message_id"] = card.message_id
 
     async def handle_clienti(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
