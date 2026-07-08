@@ -137,8 +137,18 @@ class TelegramBot:
         draft = context.chat_data["draft"]
 
         error = apply_field_value(draft, field, text)
+        try:
+            await update.message.delete()
+        except Exception as delete_error:
+            logger.debug("Could not delete user message: %s", delete_error)
+
         if error is not None:
-            await update.message.reply_text(error)
+            await context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=context.chat_data["card_message_id"],
+                text=f"{format_card(draft)}\n\n{FIELD_PROMPTS[field]}\n\n{error}",
+                reply_markup=back_only_keyboard(),
+            )
             return
 
         context.chat_data["awaiting_field"] = None
@@ -296,6 +306,7 @@ class TelegramBot:
     ) -> None:
         field = context.chat_data["invoice_awaiting_field"]
         draft = context.chat_data["invoice_draft"]
+        error = None
 
         if field == "amount":
             draft["importo"] = text.strip().replace(",", ".")
@@ -307,15 +318,26 @@ class TelegramBot:
                 date.fromisoformat(stripped)
                 draft["data_emissione"] = stripped
             except ValueError:
-                await update.message.reply_text(
-                    "⚠️ Formato non valido. Usa YYYY-MM-DD (es. 2026-06-01)."
-                )
-                return
+                error = "⚠️ Formato non valido. Usa YYYY-MM-DD (es. 2026-06-01)."
         elif field == "giorni":
             if not text.strip().isdigit():
-                await update.message.reply_text("⚠️ Inserisci un numero intero (es. 30).")
-                return
-            draft["giorni_pagamento"] = int(text.strip())
+                error = "⚠️ Inserisci un numero intero (es. 30)."
+            else:
+                draft["giorni_pagamento"] = int(text.strip())
+
+        try:
+            await update.message.delete()
+        except Exception as delete_error:
+            logger.debug("Could not delete user message: %s", delete_error)
+
+        if error is not None:
+            await context.bot.edit_message_text(
+                chat_id=update.effective_chat.id,
+                message_id=context.chat_data["invoice_card_message_id"],
+                text=f"{format_invoice_card(draft)}\n\n{INV_FIELD_PROMPTS[field]}\n\n{error}",
+                reply_markup=invoice_back_keyboard(),
+            )
+            return
 
         context.chat_data["invoice_awaiting_field"] = None
         await context.bot.edit_message_text(
@@ -419,6 +441,7 @@ class TelegramBot:
     ) -> None:
         query = update.callback_query
         draft = context.chat_data["invoice_draft"]
+        await query.edit_message_text("⏳ Sto salvando la fattura…")
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
@@ -455,6 +478,7 @@ class TelegramBot:
     ) -> None:
         query = update.callback_query
         draft = context.chat_data["draft"]
+        await query.edit_message_text("⏳ Sto salvando la spesa…")
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
