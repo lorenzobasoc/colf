@@ -96,36 +96,45 @@ def compute_shares(total: Decimal, n_debtors: int) -> tuple[Decimal, Decimal]:
     return quota, user_share
 
 
-def merge_debtors(
-    existing: list[list[str]], debts: dict[str, Decimal]
+def append_debts(
+    existing: list[list[str]], description: str, debts: dict[str, Decimal]
 ) -> list[list[str]]:
-    """Fonde i nuovi debiti nel blocco debitori esistente [[nome, importo], ...].
+    """Accoda le nuove spese al blocco debitori esistente [[nome, descrizione,
+    importo], ...], raggruppato per persona.
 
-    Ritorna il blocco aggiornato, da riscrivere per intero a partire da G25.
-    Le righe vuote vengono compattate. Solleva ValueError se la cella importo
-    di un nome coinvolto nei nuovi debiti non è numerica."""
-    rows: list[list[str]] = []
+    Ogni persona ha un gruppo: il nome compare una sola volta, sulla prima
+    riga del gruppo; le sue altre spese vanno nelle righe sotto con la
+    colonna nome vuota. Nessuna somma: ogni spesa condivisa aggiunge, per
+    ciascun debitore, una nuova riga (descrizione, quota) in fondo al gruppo
+    di quella persona (o crea un nuovo gruppo in coda se la persona non
+    esiste ancora). Le righe vuote e quelle con nome vuoto che precedono
+    qualsiasi nome vengono ignorate/compattate."""
+    groups: list[list[list[str]]] = []
     index: dict[str, int] = {}
+    current: list[list[str]] | None = None
+
     for row in existing:
-        name = (row[0] if row else "").strip()
-        if not name:
+        name = (row[0] if len(row) > 0 else "").strip()
+        desc = (row[1] if len(row) > 1 else "").strip()
+        amount = (row[2] if len(row) > 2 else "").strip()
+        if not name and not desc and not amount:
             continue
-        amount = (row[1] if len(row) > 1 else "").strip()
-        index[name.lower()] = len(rows)
-        rows.append([name, amount])
+        if name:
+            current = [[name, desc, amount]]
+            index[name.lower()] = len(groups)
+            groups.append(current)
+        else:
+            if current is None:
+                continue
+            current.append(["", desc, amount])
 
     for name, quota in debts.items():
         key = name.lower()
+        new_row = ["", description, format_amount(quota)]
         if key in index:
-            i = index[key]
-            try:
-                current = parse_amount(rows[i][1]) if rows[i][1] else Decimal("0")
-            except ArithmeticError as error:
-                raise ValueError(
-                    f"Importo non numerico per '{rows[i][0]}': {rows[i][1]!r}"
-                ) from error
-            rows[i][1] = format_amount(current + quota)
+            groups[index[key]].append(new_row)
         else:
-            index[key] = len(rows)
-            rows.append([name, format_amount(quota)])
-    return rows
+            index[key] = len(groups)
+            groups.append([[name, description, format_amount(quota)]])
+
+    return [row for group in groups for row in group]

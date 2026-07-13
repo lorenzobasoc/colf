@@ -74,7 +74,7 @@ def commit_expense(expense: Expense, *, sheets_client: gspread.Client) -> str:
     )
     debts = {name: quota for name in expense.participants}
     try:
-        add_debtors(expense.month, debts, sheets_client)
+        add_debtors(expense.month, expense.description, debts, sheets_client)
     except Exception as error:
         logger.exception("Failed to update debtors block")
         return (

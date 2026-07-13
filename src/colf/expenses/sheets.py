@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 from ..config import Settings
 from .constants import SHEET_HEADERS, SPREADSHEET_NAME_TEMPLATE
 from .domain import Expense
-from .sharing import merge_debtors
+from .sharing import append_debts
 
 logger = logging.getLogger(__name__)
 
@@ -67,16 +67,18 @@ def add_expense(expense: Expense, client: gspread.Client) -> None:
     )
 
 
-def add_debtors(month: str, debts: dict[str, Decimal], client: gspread.Client) -> None:
+def add_debtors(
+    month: str, description: str, debts: dict[str, Decimal], client: gspread.Client
+) -> None:
     worksheet = _open_month_worksheet(month, client)
     last_row = DEBTORS_FIRST_ROW + DEBTORS_MAX_ROWS - 1
-    existing = worksheet.get(f"G{DEBTORS_FIRST_ROW}:H{last_row}")
-    updated = merge_debtors(existing, debts)
+    existing = worksheet.get(f"G{DEBTORS_FIRST_ROW}:I{last_row}")
+    updated = append_debts(existing, description, debts)
     if len(updated) > DEBTORS_MAX_ROWS:
         raise ValueError(f"Blocco debitori pieno (max {DEBTORS_MAX_ROWS} righe).")
 
     worksheet.update(
-        range_name=f"G{DEBTORS_FIRST_ROW}:H{DEBTORS_FIRST_ROW + len(updated) - 1}",
+        range_name=f"G{DEBTORS_FIRST_ROW}:I{DEBTORS_FIRST_ROW + len(updated) - 1}",
         values=updated,
         value_input_option="USER_ENTERED",
     )

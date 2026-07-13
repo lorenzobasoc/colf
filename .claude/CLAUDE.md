@@ -41,7 +41,8 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
 - `text_parsing.py` — estrazione importo e descrizione via regex.
 - `sharing.py` — logica pura spese condivise: trigger regex ("da dividere
   con…"), guardrail nomi LLM + fallback split, divisione `Decimal` (l'utente
-  assorbe il resto), `merge_debtors` per il blocco debitori.
+  assorbe il resto), `append_debts` per accodare le righe nel blocco debitori
+  (raggruppato per persona, nessuna somma).
 - `llm/participants_extractor.py` — estrazione nomi partecipanti via LLM
   (few-shot, temp 0); l'output passa dal guardrail di `sharing.py`.
 - `domain.py` / `schemas.py` / `constants.py` — entità, modelli Pydantic, costanti.
@@ -52,11 +53,14 @@ categoria LLM) → scheda conferma bot → conferma → `commit_expense` → Goo
 **Spese condivise:** "Pizza 30 da dividere con Giulio e Bea" → il totale è
 diviso per i partecipanti (utente incluso, `ROUND_HALF_UP`, l'utente assorbe
 il resto); la quota utente va in A:D come spesa normale, i debitori vengono
-scritti/sommati nel blocco `G25:H44` dello stesso foglio mensile (G=nome,
-H=importo). La clausola va scritta in fondo al messaggio. Se il blocco
-debitori fallisce dopo la riga spesa, il bot avvisa (nessun rollback). Nel
-bot la scheda mostra totale/quote e il bottone ✏️ Partecipanti
-(`edit:participants`; "nessuno" → spesa normale).
+accodati nel blocco `G25:I44` dello stesso foglio mensile, raggruppato per
+persona: G=nome (una sola volta, sulla prima riga del gruppo), H=descrizione
+della spesa, I=quota. Ogni spesa condivisa aggiunge, per ciascun debitore,
+una nuova riga in fondo al gruppo di quella persona (nome vuoto nelle righe
+successive alla prima) — nessuna somma/accumulo. La clausola va scritta in
+fondo al messaggio. Se il blocco debitori fallisce dopo la riga spesa, il
+bot avvisa (nessun rollback). Nel bot la scheda mostra totale/quote e il
+bottone ✏️ Partecipanti (`edit:participants`; "nessuno" → spesa normale).
 
 #### Modulo `invoices/`
 

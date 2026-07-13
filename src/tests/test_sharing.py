@@ -159,51 +159,65 @@ class TestComputeShares:
         assert user == Decimal("7.50")
 
 
-from colf.expenses.sharing import merge_debtors
+from colf.expenses.sharing import append_debts
 
 
-class TestMergeDebtors:
-    def test_blocco_vuoto(self):
-        result = merge_debtors([], {"Giulio": Decimal("10"), "Bea": Decimal("10")})
-        assert result == [["Giulio", "10"], ["Bea", "10"]]
+class TestAppendDebts:
+    def test_blocco_vuoto_un_debitore(self):
+        result = append_debts([], "Pizza", {"Giulio": Decimal("10")})
+        assert result == [["Giulio", "Pizza", "10"]]
 
-    def test_nome_esistente_somma(self):
-        existing = [["Giulio", "10"], ["Bea", "10"]]
-        result = merge_debtors(existing, {"Giulio": Decimal("5")})
-        assert result == [["Giulio", "15"], ["Bea", "10"]]
+    def test_blocco_vuoto_due_debitori_stessa_descrizione(self):
+        result = append_debts(
+            [], "Pizza", {"Giulio": Decimal("10"), "Bea": Decimal("10")}
+        )
+        assert result == [["Giulio", "Pizza", "10"], ["Bea", "Pizza", "10"]]
+
+    def test_persona_esistente_riceve_nuova_spesa_sotto(self):
+        existing = [["Giulio", "Pizza", "10"]]
+        result = append_debts(existing, "Cinema", {"Giulio": Decimal("5")})
+        assert result == [["Giulio", "Pizza", "10"], ["", "Cinema", "5"]]
+
+    def test_persona_nuova_su_blocco_con_gruppi_esistenti(self):
+        existing = [["Giulio", "Pizza", "10"]]
+        result = append_debts(existing, "Pizza", {"Marco": Decimal("7")})
+        assert result == [["Giulio", "Pizza", "10"], ["Marco", "Pizza", "7"]]
 
     def test_match_case_insensitive(self):
-        existing = [["giulio", "10"]]
-        result = merge_debtors(existing, {"Giulio": Decimal("2.50")})
-        assert result == [["giulio", "12,50"]]
+        existing = [["giulio", "Pizza", "10"]]
+        result = append_debts(existing, "Cinema", {"Giulio": Decimal("2.50")})
+        assert result == [["giulio", "Pizza", "10"], ["", "Cinema", "2,50"]]
 
-    def test_nuovo_nome_in_coda(self):
-        existing = [["Giulio", "10"]]
-        result = merge_debtors(existing, {"Marco": Decimal("7")})
-        assert result == [["Giulio", "10"], ["Marco", "7"]]
+    def test_righe_vuote_e_ragged_compattate(self):
+        existing = [["Giulio", "Pizza", "10"], [], ["", "Cinema", "5"], ["Bea", "Pizza"]]
+        result = append_debts(existing, "Regalo Anna", {"Marco": Decimal("3")})
+        assert result == [
+            ["Giulio", "Pizza", "10"],
+            ["", "Cinema", "5"],
+            ["Bea", "Pizza", ""],
+            ["Marco", "Regalo Anna", "3"],
+        ]
 
-    def test_importo_esistente_con_virgola(self):
-        existing = [["Bea", "6,67"]]
-        result = merge_debtors(existing, {"Bea": Decimal("6.67")})
-        assert result == [["Bea", "13,34"]]
+    def test_riga_nome_vuoto_prima_di_qualsiasi_nome_ignorata(self):
+        existing = [["", "Fantasma", "1"], ["Giulio", "Pizza", "10"]]
+        result = append_debts(existing, "Cinema", {"Giulio": Decimal("5")})
+        assert result == [
+            ["Giulio", "Pizza", "10"],
+            ["", "Cinema", "5"],
+        ]
 
-    def test_riga_ragged_senza_importo(self):
-        # gspread può restituire righe senza colonna H: nome con importo vuoto
-        existing = [["Giulio"]]
-        result = merge_debtors(existing, {"Giulio": Decimal("5")})
-        assert result == [["Giulio", "5"]]
+    def test_importo_formato_italiano_preservato(self):
+        result = append_debts([], "Cena", {"Bea": Decimal("7.50")})
+        assert result == [["Bea", "Cena", "7,50"]]
 
-    def test_importo_non_numerico_su_nome_coinvolto(self):
-        existing = [["Giulio", "boh"]]
-        with pytest.raises(ValueError, match="Giulio"):
-            merge_debtors(existing, {"Giulio": Decimal("5")})
-
-    def test_importo_non_numerico_su_nome_non_coinvolto_ok(self):
-        existing = [["Altro", "testo"], ["Bea", "10"]]
-        result = merge_debtors(existing, {"Bea": Decimal("5")})
-        assert result == [["Altro", "testo"], ["Bea", "15"]]
-
-    def test_righe_vuote_compattate(self):
-        existing = [["Giulio", "10"], [], ["Bea", "10"]]
-        result = merge_debtors(existing, {"Marco": Decimal("3")})
-        assert result == [["Giulio", "10"], ["Bea", "10"], ["Marco", "3"]]
+    def test_gruppo_multi_riga_esempio_completo(self):
+        existing = [
+            ["Giulio", "Pizza", "10"],
+            ["", "Cinema", "7,50"],
+        ]
+        result = append_debts(existing, "Regalo Anna", {"Giulio": Decimal("20")})
+        assert result == [
+            ["Giulio", "Pizza", "10"],
+            ["", "Cinema", "7,50"],
+            ["", "Regalo Anna", "20"],
+        ]

@@ -38,18 +38,27 @@ class FakeClient:
 class TestAddDebtors:
     def test_scrive_blocco_da_g25(self):
         ws = FakeWorksheet([])
-        add_debtors("Luglio", {"Giulio": Decimal("10"), "Bea": Decimal("10")}, FakeClient(ws))
-        assert ws.updates == [("G25:H26", [["Giulio", "10"], ["Bea", "10"]])]
+        add_debtors(
+            "Luglio",
+            "Pizza",
+            {"Giulio": Decimal("10"), "Bea": Decimal("10")},
+            FakeClient(ws),
+        )
+        assert ws.updates == [
+            ("G25:I26", [["Giulio", "Pizza", "10"], ["Bea", "Pizza", "10"]])
+        ]
 
-    def test_somma_su_esistente(self):
-        ws = FakeWorksheet([["Giulio", "10"]])
-        add_debtors("Luglio", {"Giulio": Decimal("5")}, FakeClient(ws))
-        assert ws.updates == [("G25:H25", [["Giulio", "15"]])]
+    def test_persona_esistente_riceve_riga_sotto_senza_somma(self):
+        ws = FakeWorksheet([["Giulio", "Pizza", "10"]])
+        add_debtors("Luglio", "Cinema", {"Giulio": Decimal("5")}, FakeClient(ws))
+        assert ws.updates == [
+            ("G25:I26", [["Giulio", "Pizza", "10"], ["", "Cinema", "5"]])
+        ]
 
     def test_blocco_pieno_solleva(self):
-        ws = FakeWorksheet([[f"Nome{i}", "1"] for i in range(20)])
+        ws = FakeWorksheet([[f"Nome{i}", "Cena", "1"] for i in range(20)])
         with pytest.raises(ValueError, match="pieno"):
-            add_debtors("Luglio", {"Nuovo": Decimal("5")}, FakeClient(ws))
+            add_debtors("Luglio", "Cena", {"Nuovo": Decimal("5")}, FakeClient(ws))
 
 
 SHARED = Expense(
@@ -71,7 +80,9 @@ class TestCommitExpense:
     def test_normale_non_tocca_debitori(self, monkeypatch):
         monkeypatch.setattr(service, "add_expense", lambda e, c: None)
         called = []
-        monkeypatch.setattr(service, "add_debtors", lambda m, d, c: called.append(d))
+        monkeypatch.setattr(
+            service, "add_debtors", lambda m, desc, d, c: called.append(d)
+        )
         summary = service.commit_expense(NORMAL, sheets_client=object())
         assert called == []
         assert "Debitori" not in summary
@@ -79,15 +90,21 @@ class TestCommitExpense:
     def test_condivisa_aggiorna_debitori(self, monkeypatch):
         monkeypatch.setattr(service, "add_expense", lambda e, c: None)
         called = []
-        monkeypatch.setattr(service, "add_debtors", lambda m, d, c: called.append((m, d)))
+        monkeypatch.setattr(
+            service,
+            "add_debtors",
+            lambda m, desc, d, c: called.append((m, desc, d)),
+        )
         summary = service.commit_expense(SHARED, sheets_client=object())
-        assert called == [("Luglio", {"Giulio": Decimal("10"), "Bea": Decimal("10")})]
+        assert called == [
+            ("Luglio", "Pizza", {"Giulio": Decimal("10"), "Bea": Decimal("10")})
+        ]
         assert "Debitori aggiornati: Giulio 10, Bea 10" in summary
 
     def test_errore_debitori_riporta_avviso(self, monkeypatch):
         monkeypatch.setattr(service, "add_expense", lambda e, c: None)
 
-        def boom(month, debts, client):
+        def boom(month, description, debts, client):
             raise ValueError("Blocco debitori pieno (max 20 righe).")
 
         monkeypatch.setattr(service, "add_debtors", boom)
