@@ -18,7 +18,9 @@ italiano.
 
 ## Architettura tecnica
 
-Il repo contiene due servizi separati, con dipendenze e Dockerfile distinti.
+Il repo contiene due servizi separati, con dipendenze e Dockerfile distinti,
+più un modulo client nativo (`src/colf-android`, senza Dockerfile, non parte
+del deploy Docker).
 
 ### `src/colf` — API FastAPI
 
@@ -33,7 +35,11 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
 
 #### Modulo `expenses/`
 
-- `router.py` — `POST /api/agents/expenses/parse` e `POST /api/agents/expenses/commit`.
+- `router.py` — `POST /api/agents/expenses/parse` e `POST /api/agents/expenses/commit`;
+  `POST /api/agents/expenses/parse-notification` (spesa da notifica bancaria: importo
+  ed esercente via regex, categoria via LLM) e `POST /api/agents/expenses/categorize`
+  (ricalcolo categoria quando l'esercente non è estraibile e l'utente scrive la
+  descrizione a mano).
 - `service.py` — `parse_expense()` e `commit_expense()`.
 - `llm/categorizer.py` — modello GGUF 1.5B con `llama-cpp-python`, temp 0.
 - `llm/date_extractor.py` — estrazione data via LLM con few-shot dinamici.
@@ -61,6 +67,17 @@ successive alla prima) — nessuna somma/accumulo. La clausola va scritta in
 fondo al messaggio. Se il blocco debitori fallisce dopo la riga spesa, il
 bot avvisa (nessun rollback). Nel bot la scheda mostra totale/quote e il
 bottone ✏️ Partecipanti (`edit:participants`; "nessuno" → spesa normale).
+
+**Spese da notifica bancaria:** l'app Android (`src/colf-android/`) intercetta
+la notifica di pagamento della banca e la inoltra al server di ingest del bot
+(vedi sotto), che chiama `POST /api/agents/expenses/parse-notification` con
+pacchetto/titolo/testo/timestamp della notifica; importo ed esercente sono
+estratti via regex, la categoria via LLM. Il bot mostra la stessa scheda di
+conferma del flusso testuale, con gli stessi bottoni. Se l'esercente non è
+estraibile, la risposta ha `needs_description: true`: il bot chiede la
+descrizione all'utente e ricalcola la categoria con
+`POST /api/agents/expenses/categorize`. Il commit è lo stesso `commit_expense`
+esistente, nessuna scrittura diversa su Google Sheets.
 
 #### Modulo `invoices/`
 
@@ -115,7 +132,34 @@ dominio: chiama solo le API REST con `httpx.AsyncClient`.
 
 **Comandi bot:** testo libero → spesa; `/fattura <nome>` → fattura; `/clienti` →
 lista clienti; `/scadenze` → fatture in scadenza 7gg; `/stato <numero>` → stato
-fattura.
+fattura; `/notifiche on|off|stato` → attiva/disattiva/mostra lo stato della
+cattura spese da notifica bancaria.
+
+**Server di ingest (notifiche bancarie):** il bot espone, nello stesso processo
+che fa polling su Telegram, un piccolo server HTTP `aiohttp` per ricevere le
+notifiche inoltrate dall'app Android. `POST /ingest/notification` (header
+`X-Ingest-Token`, body `{"package","title","text","posted_at"}`) → `200
+{"status":"ok"}`, `200 {"status":"disabled"}` se la feature è OFF, `401` token
+errato, `400` payload invalido, `409 {"status":"busy"}` se c'è già una
+spesa/fattura in sospeso, `502` se l'API non risponde. `GET /ingest/health`
+(stesso token) → `{"status":"ok","enabled":true|false}`. Il toggle
+`/notifiche` è **in memoria** nel bot, default **OFF**: va riattivato a ogni
+riavvio del container. A feature OFF le notifiche in arrivo vengono scartate
+silenziosamente (solo log). Il server non parte se mancano `INGEST_TOKEN` o
+`TELEGRAM_CHAT_ID` (il bot continua comunque a funzionare normalmente).
+
+### `src/colf-android` — app Android
+
+App nativa Kotlin, installata sul telefono dell'utente. Non fa parte del
+deploy Docker (nessun Dockerfile, nessun servizio nel compose). Compiti:
+
+1. intercetta con un `NotificationListenerService` le notifiche di pagamento
+   della banca configurata;
+2. accende il tunnel WireGuard mandando l'intent
+   `com.wireguard.android.action.SET_TUNNEL_UP` all'app WireGuard ufficiale
+   (richiede "Allow remote control intents" abilitato in WireGuard);
+3. fa `POST` della notifica (pacchetto, titolo, testo, timestamp) al server di
+   ingest del bot Telegram (vedi sopra), con `X-Ingest-Token` come credenziale.
 
 ### Configurazione
 
@@ -148,6 +192,16 @@ INVOICES_XML_DIR=data/invoices/xml
 Il modello GGUF va in `src/colf/models/` (gitignored). Le credenziali Google
 sono in `.keys/` (gitignored).
 
+Il servizio `telegram-bot` usa inoltre queste variabili, per il server di
+ingest delle notifiche bancarie (vedi sopra):
+
+```
+INGEST_TOKEN=...       # segreto condiviso con l'app Android; se manca il server di ingest non parte
+TELEGRAM_CHAT_ID=...   # chat a cui mandare la scheda spesa generata da una notifica; se manca il server di ingest non parte
+# Opzionale (ha default):
+INGEST_PORT=8080
+```
+
 ## Comandi
 
 API in locale:
@@ -174,12 +228,15 @@ cd src/colf-telegram-bot && uv run pytest tests/ -v    # bot
 ## Deploy (`.docker/`)
 
 `docker-compose.yml` definisce due servizi: `colf` (API, porta host 9901) e
-`telegram-bot`. Il DB SQLite è montato come volume `../data:/app/data` per
+`telegram-bot` (bot Telegram + server di ingest notifiche bancarie, porta
+host 9902). Il DB SQLite è montato come volume `../data:/app/data` per
 persistere tra i rebuild. Il modello GGUF è montato da `../models`.
 
-`.docker/.env` (gitignored) contiene `TELEGRAM_BOT_TOKEN` e tutte le variabili
-cedente/PEC. `SQLITE_PATH` e `INVOICES_XML_DIR` sono impostati esplicitamente
-nell'environment del compose a `/app/data/colf.db` e `/app/data/invoices/xml`.
+`.docker/.env` (gitignored) contiene `TELEGRAM_BOT_TOKEN`, `INGEST_TOKEN`,
+`TELEGRAM_CHAT_ID` e tutte le variabili cedente/PEC. `SQLITE_PATH` e
+`INVOICES_XML_DIR` sono impostati esplicitamente nell'environment del compose
+a `/app/data/colf.db` e `/app/data/invoices/xml`; `INGEST_PORT` è impostato a
+`8080` (porta interna del container, esposta come 9902 sull'host).
 
 ```bash
 cd .docker && docker compose up -d --build

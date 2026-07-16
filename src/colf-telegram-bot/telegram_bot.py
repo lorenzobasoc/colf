@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 from datetime import date
@@ -29,6 +28,11 @@ from invoice_card import (
     invoice_back_keyboard,
     invoice_main_keyboard,
 )
+from notification_ingest import (
+    NotificationIngestServer,
+    build_parse_notification_request,
+    create_ingest_server_from_env,
+)
 
 load_dotenv()
 
@@ -46,8 +50,34 @@ class TelegramBot:
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
 
         self.api_base_url = os.getenv("API_BASE_URL")
-        self.application = Application.builder().token(self.bot_token).build()
+        self.notification_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+        # Feature "spese da notifica bancaria": in memoria, default OFF ad ogni
+        # riavvio. Nessuna persistenza: va riattivata da Telegram con /notifiche.
+        self.notifications_enabled = False
+        self.ingest_server: NotificationIngestServer | None = None
+        self.application = (
+            Application.builder()
+            .token(self.bot_token)
+            .post_init(self._post_init)
+            .post_shutdown(self._post_shutdown)
+            .build()
+        )
         self._setup_handlers()
+
+    async def _post_init(self, application: Application) -> None:
+        """Eseguito da `run_polling` dopo l'inizializzazione: avvia il server
+        di ingest notifiche se INGEST_TOKEN/TELEGRAM_CHAT_ID sono configurati."""
+        logger.info("Bot is running. Press Ctrl+C to stop.")
+        self.ingest_server = create_ingest_server_from_env(self)
+        if self.ingest_server is not None:
+            await self.ingest_server.start()
+
+    async def _post_shutdown(self, application: Application) -> None:
+        """Eseguito da `run_polling` in fase di spegnimento: ferma il server
+        di ingest notifiche, se era stato avviato."""
+        if self.ingest_server is not None:
+            await self.ingest_server.stop()
+            self.ingest_server = None
 
     def _setup_handlers(self):
         self.application.add_handler(
@@ -58,10 +88,18 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("clienti", self.handle_clienti))
         self.application.add_handler(CommandHandler("scadenze", self.handle_scadenze))
         self.application.add_handler(CommandHandler("stato", self.handle_stato))
+        self.application.add_handler(CommandHandler("notifiche", self.handle_notifiche))
 
     @staticmethod
     def _clear(context: ContextTypes.DEFAULT_TYPE) -> None:
-        for key in ("draft", "categories", "card_message_id", "awaiting_field"):
+        for key in (
+            "draft",
+            "categories",
+            "card_message_id",
+            "awaiting_field",
+            "from_notification",
+            "needs_category_refresh",
+        ):
             context.chat_data.pop(key, None)
 
     @staticmethod
@@ -171,12 +209,131 @@ class TelegramBot:
             return
 
         context.chat_data["awaiting_field"] = None
+
+        # Spese da notifica bancaria senza descrizione riconosciuta: una volta
+        # che l'utente la scrive, ricategorizza. Il flusso testuale normale non
+        # imposta mai questo flag, quindi il suo comportamento non cambia.
+        if field == "description" and context.chat_data.pop(
+            "needs_category_refresh", False
+        ):
+            await self._refresh_category(draft)
+
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=context.chat_data["card_message_id"],
             text=format_card(draft),
             reply_markup=main_keyboard(bool(draft.get("participants"))),
         )
+
+    async def _refresh_category(self, draft: dict) -> None:
+        """Ricategorizza la spesa dopo che l'utente ha inserito la descrizione
+        mancante da una notifica bancaria. Se la chiamata fallisce, logga e
+        lascia la categoria di fallback: non deve rompere il flusso."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.api_base_url}/api/agents/expenses/categorize",
+                    json={"description": draft["description"]},
+                    timeout=60.0,
+                )
+            response.raise_for_status()
+            result = response.json()
+        except Exception as error:
+            logger.error("Categorize request failed: %s", error)
+            return
+
+        if result.get("success") and result.get("category"):
+            draft["category"] = result["category"]
+        else:
+            logger.error("Categorize error: %s", result.get("error"))
+
+    # ── Bank notification ingest ────────────────────────────────────────────────
+
+    async def handle_bank_notification(self, payload: dict) -> str:
+        """Gestisce una notifica bancaria già validata dal server di ingest:
+        chiama l'API di parsing e manda la scheda spesa in chat, riusando
+        esattamente `format_card`/`main_keyboard` del flusso testuale.
+
+        Ritorna "ok", "busy" (c'è già un draft spesa/fattura in sospeso) o
+        "error" (l'API di parsing ha fallito). Non solleva eccezioni per gli
+        errori attesi dell'API: solo un errore imprevisto si propaga.
+        """
+        chat_id = int(self.notification_chat_id)
+        chat_data = self.application.chat_data[chat_id]
+
+        if chat_data.get("draft") or chat_data.get("invoice_draft"):
+            title = payload.get("title") or ""
+            text = payload.get("text") or ""
+            await self.application.bot.send_message(
+                chat_id=chat_id,
+                text=(
+                    "⚠️ Notifica di spesa ricevuta ma c'è già qualcosa in sospeso:\n"
+                    f"{title} — {text}"
+                ),
+            )
+            return "busy"
+
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    f"{self.api_base_url}/api/agents/expenses/parse-notification",
+                    json=build_parse_notification_request(payload),
+                    timeout=120.0,
+                )
+            response.raise_for_status()
+            result = response.json()
+        except Exception as error:
+            logger.error("Parse-notification request failed: %s", error)
+            return "error"
+
+        if not result.get("success"):
+            logger.error("Parse-notification error: %s", result.get("error"))
+            return "error"
+
+        draft = result["draft"]
+        chat_data["draft"] = draft
+        chat_data["categories"] = result["categories"]
+        chat_data["from_notification"] = True
+
+        if result.get("needs_description"):
+            chat_data["awaiting_field"] = "description"
+            chat_data["needs_category_refresh"] = True
+            text = (
+                "⚠️ Non sono riuscito a capire la descrizione dalla notifica.\n\n"
+                f"{format_card(draft)}\n\n{FIELD_PROMPTS['description']}"
+            )
+            card = await self.application.bot.send_message(
+                chat_id=chat_id, text=text, reply_markup=back_only_keyboard()
+            )
+        else:
+            card = await self.application.bot.send_message(
+                chat_id=chat_id,
+                text=format_card(draft),
+                reply_markup=main_keyboard(bool(draft.get("participants"))),
+            )
+
+        chat_data["card_message_id"] = card.message_id
+        return "ok"
+
+    async def handle_notifiche(
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+    ) -> None:
+        args = context.args
+        arg = args[0].lower() if args else "stato"
+
+        if arg == "on":
+            self.notifications_enabled = True
+            await update.message.reply_text("✅ Notifiche bancarie attive.")
+        elif arg == "off":
+            self.notifications_enabled = False
+            await update.message.reply_text("🔕 Notifiche bancarie disattivate.")
+        elif arg == "stato":
+            stato = "attive ✅" if self.notifications_enabled else "disattivate 🔕"
+            await update.message.reply_text(f"Notifiche bancarie: {stato}")
+        else:
+            await update.message.reply_text(
+                "Usa: /notifiche on | /notifiche off | /notifiche stato"
+            )
 
     # ── Invoice command handlers ───────────────────────────────────────────────
 
@@ -555,21 +712,17 @@ class TelegramBot:
         self._clear(context)
         await self._finalize_card(query, f"✅ {result['response']}")
 
-    async def start_polling(self):
-        logger.info("Starting Telegram bot...")
-        await self.application.initialize()
-        await self.application.start()
-        await self.application.updater.start_polling()
-        logger.info("Bot is running. Press Ctrl+C to stop.")
-
-        try:
-            await asyncio.Event().wait()
-        except KeyboardInterrupt:
-            logger.info("Stopping bot...")
-        finally:
-            await self.application.updater.stop()
-            await self.application.stop()
-            await self.application.shutdown()
-
     def run(self):
-        asyncio.run(self.start_polling())
+        """Avvia il bot in polling.
+
+        Usa `Application.run_polling()` (sincrono, gestisce lui il loop e lo
+        shutdown) invece di orchestrare a mano initialize/start/updater: è
+        l'unico modo per cui gli hook `post_init`/`post_shutdown` registrati
+        in `__init__` vengono eseguiti (vedi doc di `run_polling`), e sono
+        questi hook ad avviare/fermare il server di ingest notifiche.
+        """
+        logger.info("Starting Telegram bot...")
+        try:
+            self.application.run_polling()
+        finally:
+            logger.info("Bot stopped.")

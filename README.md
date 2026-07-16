@@ -22,6 +22,10 @@ A small quantised model running on my own hardware handles:
 - **Invoices** — issues FatturaPA v1.2 invoices (forfettario RF19) from Telegram
   or a small web UI: generates the XML and sends it to the SdI via PEC, with
   clients and invoices persisted in SQLite.
+- **Bank notification capture** — a small Android app on my phone reads my
+  bank's payment notifications, wakes up the WireGuard VPN, and forwards them
+  to CoLF, which turns them into the same expense confirmation card as typing
+  it myself. Toggle with `/notifiche on|off|stato` in the bot.
 
 ---
 

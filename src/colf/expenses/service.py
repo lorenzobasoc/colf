@@ -1,4 +1,5 @@
 import logging
+from datetime import date, datetime
 
 import gspread
 from llama_cpp import Llama
@@ -6,8 +7,9 @@ from llama_cpp import Llama
 from .llm.categorizer import categorize
 from .llm.date_extractor import extract_date
 from .llm.participants_extractor import extract_participants
-from .constants import ITALIAN_MONTHS
+from .constants import CATEGORIES, FALLBACK_CATEGORY, ITALIAN_MONTHS
 from .domain import Expense
+from .notifications import extract_merchant, extract_notification_amount
 from .sharing import (
     compute_shares,
     extract_share_clause,
@@ -84,3 +86,44 @@ def commit_expense(expense: Expense, *, sheets_client: gspread.Client) -> str:
         f"{name} {format_amount(amount)}" for name, amount in debts.items()
     )
     return f"{summary}\nDebitori aggiornati: {debtors_text}"
+
+
+def _parse_posted_at(posted_at: str | None) -> date:
+    if posted_at is None:
+        return date.today()
+    try:
+        return datetime.fromisoformat(posted_at.replace("Z", "+00:00")).date()
+    except ValueError:
+        return date.today()
+
+
+def parse_notification(
+    title: str, text: str, posted_at: str | None, *, llm: Llama
+) -> tuple[Expense, bool]:
+    combined = f"{title} {text}"
+    amount = extract_notification_amount(combined) or ""
+    merchant = extract_merchant(combined)
+    needs_description = merchant is None
+    category = (
+        CATEGORIES[FALLBACK_CATEGORY]
+        if needs_description
+        else categorize(merchant, llm)
+    )
+    expense_date = _parse_posted_at(posted_at)
+    expense = Expense(
+        day=expense_date.day,
+        month=ITALIAN_MONTHS[expense_date.month - 1],
+        description=merchant or "",
+        category=category,
+        amount=amount,
+        total_amount=None,
+        participants=(),
+    )
+    logger.info("Parsed notification expense draft: %s", expense)
+    return expense, needs_description
+
+
+def categorize_description(description: str, *, llm: Llama) -> str:
+    if not description.strip():
+        return CATEGORIES[FALLBACK_CATEGORY]
+    return categorize(description, llm)

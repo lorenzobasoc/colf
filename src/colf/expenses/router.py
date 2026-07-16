@@ -9,13 +9,22 @@ from .constants import CATEGORIES
 from .dependencies import get_llm, get_sheets_client
 from .domain import Expense
 from .schemas import (
+    CategorizeRequest,
+    CategorizeResponse,
     CategoryOption,
     CommitResponse,
     ExpenseDraft,
     MessageRequest,
+    NotificationRequest,
+    ParseNotificationResponse,
     ParseResponse,
 )
-from .service import commit_expense, parse_expense
+from .service import (
+    categorize_description,
+    commit_expense,
+    parse_expense,
+    parse_notification,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -60,3 +69,37 @@ def commit_message(
     except Exception as error:
         logger.exception("Failed to commit expense")
         return CommitResponse(response="", success=False, error=str(error))
+
+
+@router.post("/parse-notification", response_model=ParseNotificationResponse)
+def parse_notification_message(
+    payload: NotificationRequest,
+    llm: Llama = Depends(get_llm),
+) -> ParseNotificationResponse:
+    try:
+        expense, needs_description = parse_notification(
+            payload.title, payload.text, payload.posted_at, llm=llm
+        )
+        draft = ExpenseDraft(**asdict(expense))
+        return ParseNotificationResponse(
+            draft=draft,
+            categories=_category_options(),
+            needs_description=needs_description,
+            success=True,
+        )
+    except Exception as error:
+        logger.exception("Failed to parse notification")
+        return ParseNotificationResponse(success=False, error=str(error))
+
+
+@router.post("/categorize", response_model=CategorizeResponse)
+def categorize_message(
+    payload: CategorizeRequest,
+    llm: Llama = Depends(get_llm),
+) -> CategorizeResponse:
+    try:
+        category = categorize_description(payload.description, llm=llm)
+        return CategorizeResponse(category=category, success=True)
+    except Exception as error:
+        logger.exception("Failed to categorize description")
+        return CategorizeResponse(category="", success=False, error=str(error))

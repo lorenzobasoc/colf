@@ -31,3 +31,28 @@ class CommitResponse(BaseModel):
     response: str
     success: bool
     error: str | None = None
+
+
+class NotificationRequest(BaseModel):
+    title: str
+    text: str
+    source: str | None = None
+    posted_at: str | None = None
+
+
+class ParseNotificationResponse(BaseModel):
+    draft: ExpenseDraft | None = None
+    categories: list[CategoryOption] = []
+    needs_description: bool = False
+    success: bool
+    error: str | None = None
+
+
+class CategorizeRequest(BaseModel):
+    description: str
+
+
+class CategorizeResponse(BaseModel):
+    category: str
+    success: bool
+    error: str | None = None
