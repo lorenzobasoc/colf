@@ -6,7 +6,7 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 from ..config import Settings
-from .constants import SHEET_HEADERS, SPREADSHEET_NAME_TEMPLATE
+from .constants import ITALIAN_MONTHS, SHEET_HEADERS, SPREADSHEET_NAME_TEMPLATE
 from .domain import Expense
 from .sharing import append_debts
 
@@ -83,3 +83,41 @@ def add_debtors(
         value_input_option="USER_ENTERED",
     )
     logger.info("Debtors block updated on '%s': %s", month, updated)
+
+
+def read_categorized_descriptions(client: gspread.Client) -> list[tuple[str, str]]:
+    """Legge le spese gia' categorizzate dell'anno corrente come coppie
+    (descrizione, categoria) in ordine cronologico (mesi in ordine, righe
+    dall'alto), per il seed di CategoryCache. Non solleva: in caso di foglio
+    mancante o errore su un mese ritorna cio' che ha raccolto."""
+    spreadsheet_name = SPREADSHEET_NAME_TEMPLATE.format(year=date.today().year)
+    try:
+        spreadsheet = client.open(spreadsheet_name)
+    except gspread.SpreadsheetNotFound:
+        logger.warning("Spreadsheet '%s' non trovato.", spreadsheet_name)
+        return []
+
+    worksheets_by_title = {ws.title: ws for ws in spreadsheet.worksheets()}
+
+    pairs: list[tuple[str, str]] = []
+    for month in ITALIAN_MONTHS:
+        worksheet = worksheets_by_title.get(month)
+        if worksheet is None:
+            continue
+        try:
+            rows = worksheet.get("B2:C")
+        except Exception:
+            logger.exception("Failed to read worksheet '%s' for category cache", month)
+            continue
+        for row in rows:
+            if len(row) < 2:
+                continue
+            description = row[0].strip()
+            category = row[1].strip()
+            if not description or not category:
+                continue
+            if description.casefold() == "descrizione":
+                continue
+            pairs.append((description, category))
+
+    return pairs

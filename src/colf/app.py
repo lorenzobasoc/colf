@@ -6,9 +6,10 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 
 from .config import get_settings
+from .expenses.category_cache import CategoryCache
 from .expenses.llm.categorizer import load_llm
 from .expenses.router import router as expenses_router
-from .expenses.sheets import create_sheets_client
+from .expenses.sheets import create_sheets_client, read_categorized_descriptions
 from .invoices.repository import create_tables
 from .invoices.router import api_router as invoices_api_router
 from .invoices.router import ui_router as invoices_ui_router
@@ -24,6 +25,9 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     app.state.llm = load_llm(settings)
     app.state.sheets_client = create_sheets_client(settings)
+    app.state.category_cache = CategoryCache(
+        lambda: read_categorized_descriptions(app.state.sheets_client)
+    )
 
     settings.sqlite_path.parent.mkdir(parents=True, exist_ok=True)
     settings.invoices_xml_dir.mkdir(parents=True, exist_ok=True)

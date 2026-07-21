@@ -4,6 +4,7 @@ from datetime import date, datetime
 import gspread
 from llama_cpp import Llama
 
+from .category_cache import CategoryCache
 from .llm.categorizer import categorize
 from .llm.date_extractor import extract_date
 from .llm.participants_extractor import extract_participants
@@ -25,7 +26,9 @@ from .text_parsing import extract_amount, extract_description
 logger = logging.getLogger(__name__)
 
 
-def parse_expense(message: str, *, llm: Llama) -> Expense:
+def parse_expense(
+    message: str, *, llm: Llama, category_cache: CategoryCache | None = None
+) -> Expense:
     clause = extract_share_clause(message)
     participants: list[str] = []
     base = message
@@ -47,11 +50,16 @@ def parse_expense(message: str, *, llm: Llama) -> Expense:
         amount = format_amount(user_share)
         total_amount = raw_amount
 
+    description = extract_description(base)
+    category = category_cache.lookup(description) if category_cache else None
+    if category is None:
+        category = categorize(base, llm)
+
     expense = Expense(
         day=expense_date.day,
         month=ITALIAN_MONTHS[expense_date.month - 1],
-        description=extract_description(base),
-        category=categorize(base, llm),
+        description=description,
+        category=category,
         amount=amount,
         total_amount=total_amount,
         participants=tuple(participants),
@@ -60,8 +68,15 @@ def parse_expense(message: str, *, llm: Llama) -> Expense:
     return expense
 
 
-def commit_expense(expense: Expense, *, sheets_client: gspread.Client) -> str:
+def commit_expense(
+    expense: Expense,
+    *,
+    sheets_client: gspread.Client,
+    category_cache: CategoryCache | None = None,
+) -> str:
     add_expense(expense, sheets_client)
+    if category_cache is not None:
+        category_cache.remember(expense.description, expense.category)
     logger.info("Recorded expense: %s", expense)
     summary = (
         f"Spesa registrata: {expense.description or 'senza descrizione'} "
@@ -98,17 +113,23 @@ def _parse_posted_at(posted_at: str | None) -> date:
 
 
 def parse_notification(
-    title: str, text: str, posted_at: str | None, *, llm: Llama
+    title: str,
+    text: str,
+    posted_at: str | None,
+    *,
+    llm: Llama,
+    category_cache: CategoryCache | None = None,
 ) -> tuple[Expense, bool]:
     combined = f"{title} {text}"
     amount = extract_notification_amount(combined) or ""
     merchant = extract_merchant(combined)
     needs_description = merchant is None
-    category = (
-        CATEGORIES[FALLBACK_CATEGORY]
-        if needs_description
-        else categorize(merchant, llm)
-    )
+    if needs_description:
+        category = CATEGORIES[FALLBACK_CATEGORY]
+    else:
+        category = (
+            category_cache.lookup(merchant) if category_cache else None
+        ) or categorize(merchant, llm)
     expense_date = _parse_posted_at(posted_at)
     expense = Expense(
         day=expense_date.day,
@@ -123,7 +144,10 @@ def parse_notification(
     return expense, needs_description
 
 
-def categorize_description(description: str, *, llm: Llama) -> str:
+def categorize_description(
+    description: str, *, llm: Llama, category_cache: CategoryCache | None = None
+) -> str:
     if not description.strip():
         return CATEGORIES[FALLBACK_CATEGORY]
-    return categorize(description, llm)
+    cached = category_cache.lookup(description) if category_cache else None
+    return cached or categorize(description, llm)

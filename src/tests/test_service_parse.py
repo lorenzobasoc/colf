@@ -1,4 +1,6 @@
-from colf.expenses.service import parse_expense
+from colf.expenses.category_cache import CategoryCache
+from colf.expenses.domain import Expense
+from colf.expenses.service import commit_expense, parse_expense
 
 
 class FakeLlm:
@@ -6,6 +8,7 @@ class FakeLlm:
 
     def __init__(self, participants: str = "Giulio, Bea"):
         self.participants = participants
+        self.categorizer_calls = 0
 
     def create_chat_completion(self, messages, **kwargs):
         system = messages[0]["content"]
@@ -13,8 +16,11 @@ class FakeLlm:
             content = self.participants
         elif "date extraction assistant" in system:
             content = "02/07"
-        else:  # categorizer
+        elif "text classification assistant" in system:  # categorizer
+            self.categorizer_calls += 1
             content = "Cibo fuori"
+        else:
+            content = "02/07"
         return {"choices": [{"message": {"content": content}}]}
 
 
@@ -63,3 +69,51 @@ class TestParseExpenseCondivisa:
         assert expense.participants == ("Giulio", "Bea")
         assert expense.amount == ""
         assert expense.total_amount is None
+
+
+class TestParseExpenseCategoryCache:
+    def test_cache_seeded_evita_chiamata_llm(self):
+        cache = CategoryCache(loader=lambda: [])
+        cache.remember("Driutti", "🍺 Bar")
+        llm = FakeLlm()
+
+        expense = parse_expense("Driutti 5", llm=llm, category_cache=cache)
+
+        assert expense.description == "Driutti"
+        assert expense.category == "🍺 Bar"
+        assert llm.categorizer_calls == 0
+
+    def test_cache_miss_ricade_su_llm(self):
+        cache = CategoryCache(loader=lambda: [])
+        llm = FakeLlm()
+
+        expense = parse_expense("Driutti 5", llm=llm, category_cache=cache)
+
+        assert expense.category == "🍔 Cibo fuori"
+        assert llm.categorizer_calls == 1
+
+    def test_senza_cache_comportamento_invariato(self):
+        expense = parse_expense("Driutti 5", llm=FakeLlm())
+        assert expense.category == "🍔 Cibo fuori"
+
+    def test_commit_aggiorna_cache_per_parse_successivo(self, monkeypatch):
+        from colf.expenses import service
+
+        monkeypatch.setattr(service, "add_expense", lambda e, c: None)
+        monkeypatch.setattr(service, "add_debtors", lambda m, desc, d, c: None)
+
+        cache = CategoryCache(loader=lambda: [])
+        confirmed = Expense(
+            day=2,
+            month="Luglio",
+            description="Driutti",
+            category="🍺 Bar",
+            amount="5",
+        )
+        commit_expense(confirmed, sheets_client=object(), category_cache=cache)
+
+        llm = FakeLlm()
+        expense = parse_expense("Driutti 5", llm=llm, category_cache=cache)
+
+        assert expense.category == "🍺 Bar"
+        assert llm.categorizer_calls == 0

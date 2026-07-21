@@ -5,8 +5,9 @@ import gspread
 from fastapi import APIRouter, Depends
 from llama_cpp import Llama
 
+from .category_cache import CategoryCache
 from .constants import CATEGORIES
-from .dependencies import get_llm, get_sheets_client
+from .dependencies import get_category_cache, get_llm, get_sheets_client
 from .domain import Expense
 from .schemas import (
     CategorizeRequest,
@@ -39,9 +40,10 @@ def _category_options() -> list[CategoryOption]:
 def parse_message(
     payload: MessageRequest,
     llm: Llama = Depends(get_llm),
+    cache: CategoryCache = Depends(get_category_cache),
 ) -> ParseResponse:
     try:
-        expense = parse_expense(payload.message, llm=llm)
+        expense = parse_expense(payload.message, llm=llm, category_cache=cache)
         draft = ExpenseDraft(**asdict(expense))
         return ParseResponse(draft=draft, categories=_category_options(), success=True)
     except Exception as error:
@@ -53,6 +55,7 @@ def parse_message(
 def commit_message(
     draft: ExpenseDraft,
     sheets_client: gspread.Client = Depends(get_sheets_client),
+    cache: CategoryCache = Depends(get_category_cache),
 ) -> CommitResponse:
     try:
         expense = Expense(
@@ -64,7 +67,7 @@ def commit_message(
             total_amount=draft.total_amount,
             participants=tuple(draft.participants),
         )
-        summary = commit_expense(expense, sheets_client=sheets_client)
+        summary = commit_expense(expense, sheets_client=sheets_client, category_cache=cache)
         return CommitResponse(response=summary, success=True)
     except Exception as error:
         logger.exception("Failed to commit expense")
@@ -75,10 +78,15 @@ def commit_message(
 def parse_notification_message(
     payload: NotificationRequest,
     llm: Llama = Depends(get_llm),
+    cache: CategoryCache = Depends(get_category_cache),
 ) -> ParseNotificationResponse:
     try:
         expense, needs_description = parse_notification(
-            payload.title, payload.text, payload.posted_at, llm=llm
+            payload.title,
+            payload.text,
+            payload.posted_at,
+            llm=llm,
+            category_cache=cache,
         )
         draft = ExpenseDraft(**asdict(expense))
         return ParseNotificationResponse(
@@ -96,9 +104,12 @@ def parse_notification_message(
 def categorize_message(
     payload: CategorizeRequest,
     llm: Llama = Depends(get_llm),
+    cache: CategoryCache = Depends(get_category_cache),
 ) -> CategorizeResponse:
     try:
-        category = categorize_description(payload.description, llm=llm)
+        category = categorize_description(
+            payload.description, llm=llm, category_cache=cache
+        )
         return CategorizeResponse(category=category, success=True)
     except Exception as error:
         logger.exception("Failed to categorize description")
