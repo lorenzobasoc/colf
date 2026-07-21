@@ -31,16 +31,10 @@ data class NotificationPayload(
     fun toJson(): String = json.encodeToString(this)
 }
 
-@Serializable
-private data class StatusResponse(val status: String? = null, val enabled: Boolean? = null)
-
 /** Esito di una singola chiamata di ingest, già classificato per la logica di retry del Worker. */
 sealed class IngestResult {
     /** Presa in carico dal bot. */
     data object Ok : IngestResult()
-
-    /** La feature è disattivata lato bot (`/notifiche off`): non ritentare. */
-    data object Disabled : IngestResult()
 
     /** C'è già una spesa in sospeso sul bot: non ritentare. */
     data object Busy : IngestResult()
@@ -65,7 +59,7 @@ sealed class IngestResult {
 }
 
 sealed class HealthResult {
-    data class Ok(val enabled: Boolean) : HealthResult()
+    data object Ok : HealthResult()
     data object Unauthorized : HealthResult()
     data class Unreachable(val cause: Throwable) : HealthResult()
     data class Unexpected(val code: Int) : HealthResult()
@@ -104,12 +98,8 @@ class IngestApi(
         }
 
         response.use {
-            val bodyText = it.body?.string().orEmpty()
             return when (it.code) {
-                200 -> {
-                    val status = runCatching { json.decodeFromString<StatusResponse>(bodyText) }.getOrNull()
-                    if (status?.status == "disabled") IngestResult.Disabled else IngestResult.Ok
-                }
+                200 -> IngestResult.Ok
                 401 -> IngestResult.Unauthorized
                 400 -> IngestResult.BadRequest
                 409 -> IngestResult.Busy
@@ -140,11 +130,7 @@ class IngestApi(
 
         response.use {
             return when (it.code) {
-                200 -> {
-                    val body = runCatching { json.decodeFromString<StatusResponse>(it.body?.string().orEmpty()) }
-                        .getOrNull()
-                    HealthResult.Ok(enabled = body?.enabled ?: false)
-                }
+                200 -> HealthResult.Ok
                 401 -> HealthResult.Unauthorized
                 else -> HealthResult.Unexpected(it.code)
             }

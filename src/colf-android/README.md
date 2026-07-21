@@ -25,23 +25,23 @@ permessi concessi a mano: non è un prodotto multi-utente.
    spesso ripubblica la stessa notifica quando l'app bancaria la aggiorna.
 4. Il lavoro di invio viene accodato a un `CoroutineWorker` di WorkManager,
    che:
-   - manda un broadcast intent all'app WireGuard ufficiale per accendere il
-     tunnel (`SET_TUNNEL_UP`);
    - prova a fare `POST /ingest/notification` con retry a backoff (2s, 4s,
      8s, 16s tra un tentativo e l'altro, 5 tentativi totali, nessuna attesa
-     dopo l'ultimo) perché non c'è modo affidabile di sapere se il tunnel è
-     già su — l'unico segnale reale è che la richiesta HTTP vada a buon fine;
+     dopo l'ultimo) per assorbire cali di rete momentanei;
    - se anche questi tentativi falliscono per motivi di rete o per un `502`,
      delega il retry a WorkManager stesso (`Result.retry()`), che riprova più
      avanti (con backoff esponenziale a partire da 30s) quando c'è di nuovo
      rete, anche se l'app nel frattempo è stata chiusa;
-   - su `401`, `400`, `409`, `200 {"status":"disabled"}` o un Base URL vuoto/
-     malformato (es. senza `http://`) si ferma subito e non ritenta (sono
-     esiti definitivi, non transitori).
+   - su `401`, `400`, `409` o un Base URL vuoto/malformato (es. senza
+     `http://`) si ferma subito e non ritenta (sono esiti definitivi, non
+     transitori).
 5. Una Activity Compose (Material 3) permette di configurare URL del server,
-   token, nome del tunnel WireGuard e lista dei package bancari da
-   ascoltare, con un pulsante "Testa connessione" e uno per aprire le
-   impostazioni di accesso alle notifiche.
+   token e lista dei package bancari da ascoltare, con un pulsante "Testa
+   connessione" e uno per aprire le impostazioni di accesso alle notifiche.
+
+L'app **non controlla il tunnel WireGuard**: se ne occupa la VPN sempre
+attiva di Android (vedi sotto). Ci ha provato, e non è possibile — la
+motivazione tecnica è documentata più avanti perché è controintuitiva.
 
 ## Compilare e installare
 
@@ -78,23 +78,47 @@ runtime standard: va concesso a mano.
 - Il pulsante **"Ricontrolla stato permesso"** aggiorna l'indicatore nella
   UI dopo essere tornati dalle impostazioni.
 
-### 2. "Allow remote control intents" nell'app WireGuard ufficiale
+### 2. VPN sempre attiva (il tunnel non lo accende l'app)
 
-L'app manda un broadcast intent (`com.wireguard.android.action.SET_TUNNEL_UP`,
-extra `tunnel` = nome del tunnel) all'app **WireGuard ufficiale**
-(`com.wireguard.android`, quella del Play Store/F-Droid) per accendere il
-tunnel prima di contattare il server. Per impostazione predefinita WireGuard
-ignora questi intent da app esterne: va abilitato esplicitamente.
+Il server di ingest sta dietro la VPN, quindi il telefono deve avere il
+tunnel su quando arriva una notifica della banca. **Questo non può farlo
+l'app.**
 
-- Apri l'app WireGuard → menu (⋮) in alto a destra → **Settings** →
-  abilita **"Allow remote control intents"**.
-- Senza questa opzione il broadcast viene inviato ma non ha alcun effetto:
-  il tunnel non si accende e la POST fallirà finché non risali a mano.
-- L'app CoLF Notify non può interrogare in modo affidabile lo stato del
-  tunnel (WireGuard non espone un'API pubblica per questo): il broadcast
-  viene sempre inviato prima di un tentativo di invio (è idempotente, non
-  ha effetti collaterali se il tunnel è già su) e il retry a backoff copre
-  il tempo che la VPN impiega a risalire.
+Perché: WireGuard espone un controllo remoto via broadcast intent
+(`SET_TUNNEL_UP`, extra `tunnel`, protetto dal permesso `dangerous`
+`com.wireguard.android.permission.CONTROL_TUNNELS`), e quel broadcast
+arriva a destinazione. Ma quando `TunnelManager$IntentReceiver` prova ad
+alzare il tunnel, `GoBackend` fa:
+
+```java
+context.startService(new Intent(context, VpnService.class));
+```
+
+cioè `startService()` e non `startForegroundService()`, e il servizio non
+chiama mai `startForeground()`. Se il processo di WireGuard è in background
+— esattamente il caso "telefono in tasca" — Android rifiuta:
+
+```
+W/ActivityManager: Background start not allowed: service Intent
+  { cmp=com.wireguard.android/.backend.GoBackend$VpnService } ... startFg?=false
+```
+
+Il divieto colpisce WireGuard, non il chiamante: nessuna modifica a questa
+app può aggirarlo (provata anche l'esenzione `SYSTEM_ALERT_WINDOW`, senza
+effetto). Il tunnel si accende solo se l'app WireGuard è già in foreground.
+
+La soluzione è la **VPN sempre attiva** di Android, che è il percorso che il
+framework autorizza a far salire quel service senza interazione (`GoBackend`
+ha un ramo dedicato per l'avvio da always-on):
+
+1. Sul telefono, in WireGuard, crea un **secondo tunnel** identico a quello
+   che usi di solito ma con `AllowedIPs = 10.0.0.0/24` (split tunnel): così
+   nel tunnel passa solo il traffico verso la VPN e non tutto quello del
+   telefono. Il tunnel full-tunnel resta disponibile per l'uso manuale.
+2. Attiva quel tunnel una volta a mano (WireGuard ripristina l'ultimo
+   tunnel usato quando parte da always-on).
+3. Impostazioni → Rete e internet → VPN → ingranaggio accanto a WireGuard →
+   **VPN sempre attiva**.
 
 ### 3. Trovare il package name dell'app bancaria
 
@@ -118,27 +142,18 @@ Nella schermata unica dell'app:
   uso).
 - **Token**: valore condiviso con il server, mandato come header
   `X-Ingest-Token` su ogni richiesta.
-- **Nome tunnel WireGuard**: deve corrispondere esattamente al nome del
-  tunnel configurato nell'app WireGuard ufficiale sul telefono.
 - **App bancarie**: un package per riga.
-- **Abilita inoltro**: interruttore generale, se spento il Worker scarta
-  subito le notifiche in coda senza contattare il server.
+- **Notifiche bancarie**: interruttore generale della feature, se spento il
+  Worker scarta subito le notifiche in coda senza contattare il server.
 - **Testa connessione**: chiama `GET /ingest/health` con l'URL e il token
-  correnti e mostra l'esito (ok / token errato / irraggiungibile / URL non
-  valido / feature spenta lato bot).
+  correnti, ritentando fino a 4 volte in ~7s finché l'esito è
+  "irraggiungibile" (la VPN può essere in ri-aggancio) — gli altri esiti sono
+  definitivi e fermano subito il test. Mostra: ok / token errato /
+  irraggiungibile / URL non valido.
 
-### 5. Attivare la feature anche lato bot
-
-Configurare l'app da sola non basta: il bot CoLF ha la feature di ingest
-notifiche **spenta di default**. Va accesa mandando al bot Telegram il
-comando:
-
-```
-/notifiche on
-```
-
-Se la feature è spenta lato bot, il server risponde `200
-{"status":"disabled"}` e l'app non ritenta (non è un errore transitorio).
+L'interruttore **Notifiche bancarie** è l'unico della feature: il bot non ha
+un proprio flag da accendere. Se è spento, il Worker scarta le notifiche senza
+contattare il server.
 
 ## Cleartext HTTP verso la VPN
 
@@ -161,7 +176,6 @@ app/src/main/kotlin/com/colf/android/
                  ColfNotificationListenerService
   work/          NotificationForwardWorker (CoroutineWorker, retry a backoff)
   network/       IngestApi (OkHttp + kotlinx.serialization)
-  wireguard/      WireGuardController (broadcast intent SET_TUNNEL_UP)
   data/          AppSettings, SettingsRepository (DataStore Preferences)
   ui/            MainActivity, ConfigScreen, ConfigViewModel (Compose, Material 3)
 app/src/test/kotlin/com/colf/android/notification/
@@ -176,10 +190,8 @@ app/src/test/kotlin/com/colf/android/notification/
 {"package": "com.bank.app", "title": "Pagamento carta", "text": "Pagamento di 42,50 EUR presso ESSELUNGA SPA", "posted_at": "2026-07-14T12:33:00"}
 ```
 
-Risposte: `200 {"status":"ok"}` (presa in carico), `200
-{"status":"disabled"}` (feature spenta lato bot, non ritentare), `401`
-(token errato, non ritentare), `400` (payload invalido, non ritentare), `409
-{"status":"busy"}` (spesa già in sospeso, non ritentare), `502` (errore
-server, ritentare).
+Risposte: `200 {"status":"ok"}` (presa in carico), `401` (token errato, non
+ritentare), `400` (payload invalido, non ritentare), `409 {"status":"busy"}`
+(spesa già in sospeso, non ritentare), `502` (errore server, ritentare).
 
-`GET /ingest/health` — stesso header → `200 {"status":"ok","enabled":true|false}`.
+`GET /ingest/health` — stesso header → `200 {"status":"ok"}`.

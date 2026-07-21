@@ -9,11 +9,11 @@ import androidx.work.Data
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
+import com.colf.android.data.AppSettings
 import com.colf.android.data.SettingsRepository
 import com.colf.android.network.IngestApi
 import com.colf.android.network.IngestResult
 import com.colf.android.network.NotificationPayload
-import com.colf.android.wireguard.WireGuardController
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.delay
 
@@ -26,7 +26,8 @@ import kotlinx.coroutines.delay
  * Due livelli di retry:
  * 1) dentro doWork(), 5 tentativi con backoff 2s/4s/8s/16s tra un tentativo e
  *    l'altro (nessuna attesa dopo l'ultimo, che delega subito a WorkManager)
- *    per dare tempo al tunnel WireGuard di risalire dopo il broadcast intent;
+ *    per assorbire cali di rete momentanei (la VPN always-on che si
+ *    ri-aggancia, passaggio wifi/4G);
  * 2) se anche questi falliscono, Result.retry() delega a WorkManager, che
  *    ritenta più avanti (con vincolo NetworkType.CONNECTED, backoff esponenziale
  *    a partire da 30s) anche se nel frattempo l'app è stata chiusa o il device
@@ -51,8 +52,6 @@ class NotificationForwardWorker @JvmOverloads constructor(
             return Result.success()
         }
 
-        WireGuardController.bringTunnelUp(applicationContext, settings.tunnelName)
-
         val payload = NotificationPayload(
             packageName = packageName,
             title = title,
@@ -60,6 +59,10 @@ class NotificationForwardWorker @JvmOverloads constructor(
             postedAt = postedAt,
         )
 
+        return forward(settings, payload)
+    }
+
+    private suspend fun forward(settings: AppSettings, payload: NotificationPayload): Result {
         val totalAttempts = BACKOFF_SCHEDULE_MILLIS.size + 1
         for (attempt in 0 until totalAttempts) {
             val result = ingestApi.postNotification(settings.baseUrl, settings.token, payload)
@@ -67,10 +70,6 @@ class NotificationForwardWorker @JvmOverloads constructor(
 
             when (result) {
                 is IngestResult.Ok -> return Result.success()
-                is IngestResult.Disabled -> {
-                    Log.i(TAG, "Feature disattivata lato bot: non ritento")
-                    return Result.success()
-                }
                 is IngestResult.Busy -> {
                     Log.i(TAG, "Spesa già in sospeso sul bot: non ritento")
                     return Result.success()
@@ -85,8 +84,7 @@ class NotificationForwardWorker @JvmOverloads constructor(
                 }
                 is IngestResult.InvalidUrl -> {
                     // Base URL vuoto o malformato: errore di configurazione, non
-                    // transitorio. Ritentare non serve a niente e sveglierebbe la
-                    // VPN all'infinito: fallisco subito.
+                    // transitorio. Ritentare non serve a niente: fallisco subito.
                     Log.e(TAG, "Base URL non valido (${result.cause.message}): non ritento", result.cause)
                     return Result.failure()
                 }
@@ -95,7 +93,7 @@ class NotificationForwardWorker @JvmOverloads constructor(
                     return Result.failure()
                 }
                 is IngestResult.ServerError, is IngestResult.NetworkFailure -> {
-                    // Probabile tunnel VPN ancora giù o errore transitorio del server: ritento.
+                    // Rete assente o errore transitorio del server: ritento.
                     val isLastAttempt = attempt == totalAttempts - 1
                     if (isLastAttempt) {
                         Log.w(TAG, "Tentativi esauriti in questo run: delego il retry a WorkManager")

@@ -13,6 +13,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -75,14 +76,6 @@ fun ConfigScreen(viewModel: ConfigViewModel = viewModel()) {
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                     )
-                    OutlinedTextField(
-                        value = settings.tunnelName,
-                        onValueChange = viewModel::setTunnelName,
-                        label = { Text("Nome tunnel WireGuard") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -122,7 +115,14 @@ fun ConfigScreen(viewModel: ConfigViewModel = viewModel()) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("Abilita inoltro")
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Notifiche bancarie")
+                        Text(
+                            "Unico interruttore della feature: se è spento, nessuna " +
+                                "notifica viene inoltrata a CoLF.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
                     Switch(
                         checked = settings.forwardingEnabled,
                         onCheckedChange = viewModel::setForwardingEnabled,
@@ -157,10 +157,6 @@ fun ConfigScreen(viewModel: ConfigViewModel = viewModel()) {
                 }
             }
 
-            Text(
-                "Ricorda: la funzione va abilitata anche lato bot con il comando " +
-                    "Telegram /notifiche on (di default è spenta).",
-            )
         }
     }
 }
@@ -170,8 +166,7 @@ private fun ConnectionTestIndicator(state: ConnectionTestState) {
     when (state) {
         ConnectionTestState.Idle -> Text("")
         ConnectionTestState.Testing -> CircularProgressIndicator(modifier = Modifier.padding(4.dp))
-        ConnectionTestState.Ok -> Text("OK, feature attiva")
-        ConnectionTestState.OkButDisabled -> Text("Raggiungibile, ma feature spenta lato bot")
+        ConnectionTestState.Ok -> Text("OK, server raggiungibile")
         ConnectionTestState.Unauthorized -> Text("Token errato")
         ConnectionTestState.Unreachable -> Text("Server irraggiungibile")
         ConnectionTestState.InvalidUrl -> Text("URL non valido: correggi il campo Base URL (es. http://10.0.0.2:9902)")

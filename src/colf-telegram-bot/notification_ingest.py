@@ -99,9 +99,7 @@ class NotificationIngestServer:
     async def handle_health(self, request: web.Request) -> web.Response:
         if not self._authorized(request):
             return web.json_response({"status": "unauthorized"}, status=401)
-        return web.json_response(
-            {"status": "ok", "enabled": bool(self.bot.notifications_enabled)}
-        )
+        return web.json_response({"status": "ok"})
 
     async def handle_notification(self, request: web.Request) -> web.Response:
         if not self._authorized(request):
@@ -117,12 +115,6 @@ class NotificationIngestServer:
         if payload is None:
             logger.info("Notifica ingest scartata (%s)", error_reason)
             return web.json_response({"status": "invalid"}, status=400)
-
-        if not self.bot.notifications_enabled:
-            logger.info(
-                "Notifica ingest ricevuta ma feature disattivata: %r", payload["title"]
-            )
-            return web.json_response({"status": "disabled"})
 
         try:
             result = await self.bot.handle_bank_notification(payload)

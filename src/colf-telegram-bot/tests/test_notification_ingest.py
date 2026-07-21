@@ -15,8 +15,7 @@ from notification_ingest import (
 class FakeBot:
     """Doppio minimale di TelegramBot: solo ciò che NotificationIngestServer usa."""
 
-    def __init__(self, notifications_enabled: bool = True):
-        self.notifications_enabled = notifications_enabled
+    def __init__(self):
         self.handle_bank_notification = AsyncMock(return_value="ok")
 
 
@@ -160,7 +159,7 @@ class NotificationIngestServerTestCase(AioHTTPTestCase):
     TOKEN = "il-token-segreto"
 
     async def get_application(self):
-        self.bot = FakeBot(notifications_enabled=True)
+        self.bot = FakeBot()
         self.server = NotificationIngestServer(self.bot, self.TOKEN, port=0)
         return self.server.build_app()
 
@@ -182,15 +181,7 @@ class NotificationIngestServerTestCase(AioHTTPTestCase):
         )
         assert resp.status == 200
         body = await resp.json()
-        assert body == {"status": "ok", "enabled": True}
-
-    async def test_health_riflette_flag_disattivato(self):
-        self.bot.notifications_enabled = False
-        resp = await self.client.request(
-            "GET", "/ingest/health", headers={INGEST_TOKEN_HEADER: self.TOKEN}
-        )
-        body = await resp.json()
-        assert body == {"status": "ok", "enabled": False}
+        assert body == {"status": "ok"}
 
     async def test_notification_senza_token_e_unauthorized(self):
         resp = await self.client.request(
@@ -222,17 +213,6 @@ class NotificationIngestServerTestCase(AioHTTPTestCase):
         assert body == {"status": "invalid"}
         self.bot.handle_bank_notification.assert_not_awaited()
 
-    async def test_notification_feature_off_e_disabled_senza_chiamare_bot(self):
-        self.bot.notifications_enabled = False
-        resp = await self.client.request(
-            "POST",
-            "/ingest/notification",
-            headers={INGEST_TOKEN_HEADER: self.TOKEN},
-            json={"title": "Pagamento", "text": "Esselunga 42,50"},
-        )
-        assert resp.status == 200
-        body = await resp.json()
-        assert body == {"status": "disabled"}
         self.bot.handle_bank_notification.assert_not_awaited()
 
     async def test_notification_ok(self):

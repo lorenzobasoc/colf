@@ -51,9 +51,8 @@ class TelegramBot:
 
         self.api_base_url = os.getenv("API_BASE_URL")
         self.notification_chat_id = os.getenv("TELEGRAM_CHAT_ID")
-        # Feature "spese da notifica bancaria": in memoria, default OFF ad ogni
-        # riavvio. Nessuna persistenza: va riattivata da Telegram con /notifiche.
-        self.notifications_enabled = False
+        # L'inoltro delle notifiche bancarie si accende e si spegne dall'app
+        # Android ("Abilita inoltro"): qui non c'è un secondo interruttore.
         self.ingest_server: NotificationIngestServer | None = None
         self.application = (
             Application.builder()
@@ -88,7 +87,6 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("clienti", self.handle_clienti))
         self.application.add_handler(CommandHandler("scadenze", self.handle_scadenze))
         self.application.add_handler(CommandHandler("stato", self.handle_stato))
-        self.application.add_handler(CommandHandler("notifiche", self.handle_notifiche))
 
     @staticmethod
     def _clear(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -314,26 +312,6 @@ class TelegramBot:
 
         chat_data["card_message_id"] = card.message_id
         return "ok"
-
-    async def handle_notifiche(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
-        args = context.args
-        arg = args[0].lower() if args else "stato"
-
-        if arg == "on":
-            self.notifications_enabled = True
-            await update.message.reply_text("✅ Notifiche bancarie attive.")
-        elif arg == "off":
-            self.notifications_enabled = False
-            await update.message.reply_text("🔕 Notifiche bancarie disattivate.")
-        elif arg == "stato":
-            stato = "attive ✅" if self.notifications_enabled else "disattivate 🔕"
-            await update.message.reply_text(f"Notifiche bancarie: {stato}")
-        else:
-            await update.message.reply_text(
-                "Usa: /notifiche on | /notifiche off | /notifiche stato"
-            )
 
     # ── Invoice command handlers ───────────────────────────────────────────────
 

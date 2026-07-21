@@ -25,7 +25,7 @@ A small quantised model running on my own hardware handles:
 - **Bank notification capture** — a small Android app on my phone reads my
   bank's payment notifications, wakes up the WireGuard VPN, and forwards them
   to CoLF, which turns them into the same expense confirmation card as typing
-  it myself. Toggle with `/notifiche on|off|stato` in the bot.
+  it myself. Toggled from the Android app itself, not from the bot.
 
 ---
 

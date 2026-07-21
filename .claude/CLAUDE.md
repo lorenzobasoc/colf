@@ -132,21 +132,24 @@ dominio: chiama solo le API REST con `httpx.AsyncClient`.
 
 **Comandi bot:** testo libero → spesa; `/fattura <nome>` → fattura; `/clienti` →
 lista clienti; `/scadenze` → fatture in scadenza 7gg; `/stato <numero>` → stato
-fattura; `/notifiche on|off|stato` → attiva/disattiva/mostra lo stato della
-cattura spese da notifica bancaria.
+fattura.
 
 **Server di ingest (notifiche bancarie):** il bot espone, nello stesso processo
 che fa polling su Telegram, un piccolo server HTTP `aiohttp` per ricevere le
 notifiche inoltrate dall'app Android. `POST /ingest/notification` (header
 `X-Ingest-Token`, body `{"package","title","text","posted_at"}`) → `200
-{"status":"ok"}`, `200 {"status":"disabled"}` se la feature è OFF, `401` token
-errato, `400` payload invalido, `409 {"status":"busy"}` se c'è già una
-spesa/fattura in sospeso, `502` se l'API non risponde. `GET /ingest/health`
-(stesso token) → `{"status":"ok","enabled":true|false}`. Il toggle
-`/notifiche` è **in memoria** nel bot, default **OFF**: va riattivato a ogni
-riavvio del container. A feature OFF le notifiche in arrivo vengono scartate
-silenziosamente (solo log). Il server non parte se mancano `INGEST_TOKEN` o
-`TELEGRAM_CHAT_ID` (il bot continua comunque a funzionare normalmente).
+{"status":"ok"}`, `401` token errato, `400` payload invalido, `409
+{"status":"busy"}` se c'è già una spesa/fattura in sospeso, `502` se l'API non
+risponde. `GET /ingest/health` (stesso token) → `{"status":"ok"}`. Il server
+non parte se mancano `INGEST_TOKEN` o `TELEGRAM_CHAT_ID` (il bot continua
+comunque a funzionare normalmente).
+
+**Interruttore della feature:** sta **solo nell'app Android** ("Notifiche
+bancarie" nella schermata di configurazione, persistito in DataStore). Il bot
+non ha un proprio flag né un comando `/notifiche`: se riceve una notifica con
+il token giusto la processa. Motivo: due interruttori in serie, di cui uno in
+memoria che tornava OFF a ogni riavvio del container, erano una fonte continua
+di "non funziona" senza segnale utile.
 
 ### `src/colf-android` — app Android
 
@@ -155,11 +158,19 @@ deploy Docker (nessun Dockerfile, nessun servizio nel compose). Compiti:
 
 1. intercetta con un `NotificationListenerService` le notifiche di pagamento
    della banca configurata;
-2. accende il tunnel WireGuard mandando l'intent
-   `com.wireguard.android.action.SET_TUNNEL_UP` all'app WireGuard ufficiale
-   (richiede "Allow remote control intents" abilitato in WireGuard);
-3. fa `POST` della notifica (pacchetto, titolo, testo, timestamp) al server di
+2. fa `POST` della notifica (pacchetto, titolo, testo, timestamp) al server di
    ingest del bot Telegram (vedi sopra), con `X-Ingest-Token` come credenziale.
+
+**L'app non controlla il tunnel WireGuard**, e non può farlo: il broadcast
+`SET_TUNNEL_UP` arriva, ma `GoBackend` avvia il proprio `VpnService` con
+`startService()` (mai `startForeground()`), e Android lo vieta a un'app in
+background — `Background start not allowed ... startFg?=false`. Il divieto
+colpisce WireGuard, non il chiamante: nessuna modifica lato app lo aggira
+(testata anche l'esenzione `SYSTEM_ALERT_WINDOW`, inefficace). Il tunnel resta
+su grazie alla **VPN sempre attiva** di Android, configurata a mano sul
+telefono con un tunnel dedicato in split tunnel (`AllowedIPs = 10.0.0.0/24`),
+così non tutto il traffico del telefono passa dall'hub VPN. Dettagli e
+motivazione in `src/colf-android/README.md`.
 
 ### Configurazione
 

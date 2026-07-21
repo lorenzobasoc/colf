@@ -7,6 +7,7 @@ import com.colf.android.data.AppSettings
 import com.colf.android.data.SettingsRepository
 import com.colf.android.network.HealthResult
 import com.colf.android.network.IngestApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,7 +20,6 @@ sealed class ConnectionTestState {
     data object Idle : ConnectionTestState()
     data object Testing : ConnectionTestState()
     data object Ok : ConnectionTestState()
-    data object OkButDisabled : ConnectionTestState()
     data object Unauthorized : ConnectionTestState()
     data object Unreachable : ConnectionTestState()
     data object InvalidUrl : ConnectionTestState()
@@ -41,7 +41,6 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setBaseUrl(value: String) = viewModelScope.launch { settingsRepository.setBaseUrl(value) }
     fun setToken(value: String) = viewModelScope.launch { settingsRepository.setToken(value) }
-    fun setTunnelName(value: String) = viewModelScope.launch { settingsRepository.setTunnelName(value) }
     fun setForwardingEnabled(value: Boolean) = viewModelScope.launch { settingsRepository.setForwardingEnabled(value) }
 
     fun setBankPackagesText(rawText: String) {
@@ -52,21 +51,47 @@ class ConfigViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { settingsRepository.setBankPackages(packages) }
     }
 
+    /**
+     * Prova `/ingest/health`, ritentando qualche volta se il server risulta
+     * irraggiungibile: la VPN è always-on, ma può essere in fase di
+     * ri-aggancio (cambio wifi/4G, uscita da doze).
+     */
     fun testConnection() {
         viewModelScope.launch {
             _connectionTestState.value = ConnectionTestState.Testing
             val current = settings.value
-            _connectionTestState.value = when (val result = ingestApi.health(current.baseUrl, current.token)) {
-                is HealthResult.Ok -> if (result.enabled) ConnectionTestState.Ok else ConnectionTestState.OkButDisabled
+
+            runHealthChecks(current)
+        }
+    }
+
+    private suspend fun runHealthChecks(current: AppSettings) {
+        val totalAttempts = HEALTH_BACKOFF_MILLIS.size + 1
+        for (attempt in 0 until totalAttempts) {
+            val state = when (ingestApi.health(current.baseUrl, current.token)) {
+                is HealthResult.Ok -> ConnectionTestState.Ok
                 is HealthResult.Unauthorized -> ConnectionTestState.Unauthorized
-                is HealthResult.Unreachable -> ConnectionTestState.Unreachable
-                is HealthResult.Unexpected -> ConnectionTestState.Unreachable
                 is HealthResult.InvalidUrl -> ConnectionTestState.InvalidUrl
+                is HealthResult.Unreachable, is HealthResult.Unexpected -> ConnectionTestState.Unreachable
             }
+
+            // Solo "irraggiungibile" può essere transitorio: gli altri esiti
+            // sono definitivi, inutile ritentare.
+            val isLastAttempt = attempt == totalAttempts - 1
+            if (state != ConnectionTestState.Unreachable || isLastAttempt) {
+                _connectionTestState.value = state
+                return
+            }
+            delay(HEALTH_BACKOFF_MILLIS[attempt])
         }
     }
 
     fun resetConnectionTestState() {
         _connectionTestState.value = ConnectionTestState.Idle
+    }
+
+    private companion object {
+        /** Attese tra un tentativo e l'altro: 4 tentativi in ~7s totali. */
+        val HEALTH_BACKOFF_MILLIS = listOf(1_000L, 2_000L, 4_000L)
     }
 }
