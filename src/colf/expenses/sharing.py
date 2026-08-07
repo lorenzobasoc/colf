@@ -96,6 +96,46 @@ def compute_shares(total: Decimal, n_debtors: int) -> tuple[Decimal, Decimal]:
     return quota, user_share
 
 
+@dataclass(frozen=True, slots=True)
+class DebtorSummary:
+    name: str
+    items: tuple[tuple[str, str], ...]
+    total: Decimal
+
+
+def parse_debtors_block(existing: list[list[str]]) -> list[DebtorSummary]:
+    """Ricostruisce i gruppi per persona dal blocco debitori grezzo
+    [[nome, descrizione, importo], ...], nello stesso modo di `append_debts`:
+    una riga con nome apre un nuovo gruppo, le righe con nome vuoto si
+    accodano al gruppo corrente. Righe vuote o senza nome che precedono
+    qualsiasi nome vengono ignorate. Ordine di apparizione preservato."""
+    groups: list[tuple[str, list[tuple[str, str]]]] = []
+    current: list[tuple[str, str]] | None = None
+
+    for row in existing:
+        name = (row[0] if len(row) > 0 else "").strip()
+        desc = (row[1] if len(row) > 1 else "").strip()
+        amount = (row[2] if len(row) > 2 else "").strip()
+        if not name and not desc and not amount:
+            continue
+        if name:
+            current = [(desc, amount)]
+            groups.append((name, current))
+        else:
+            if current is None:
+                continue
+            current.append((desc, amount))
+
+    return [
+        DebtorSummary(
+            name=name,
+            items=tuple(items),
+            total=sum((parse_amount(amount) for _, amount in items), Decimal("0")),
+        )
+        for name, items in groups
+    ]
+
+
 def append_debts(
     existing: list[list[str]], description: str, debts: dict[str, Decimal]
 ) -> list[list[str]]:

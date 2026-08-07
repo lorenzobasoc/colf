@@ -1,6 +1,7 @@
 import logging
 import os
 from datetime import date
+from zoneinfo import ZoneInfo
 
 import httpx
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ from telegram.ext import (
     filters,
 )
 
+from debtors_reminder import format_debtors_reminder, parse_reminder_time
 from expense_card import (
     FIELD_PROMPTS,
     apply_field_value,
@@ -65,11 +67,38 @@ class TelegramBot:
 
     async def _post_init(self, application: Application) -> None:
         """Eseguito da `run_polling` dopo l'inizializzazione: avvia il server
-        di ingest notifiche se INGEST_TOKEN/TELEGRAM_CHAT_ID sono configurati."""
+        di ingest notifiche se INGEST_TOKEN/TELEGRAM_CHAT_ID sono configurati,
+        poi schedula il promemoria giornaliero dei crediti (spese condivise)."""
         logger.info("Bot is running. Press Ctrl+C to stop.")
         self.ingest_server = create_ingest_server_from_env(self)
         if self.ingest_server is not None:
             await self.ingest_server.start()
+
+        self._schedule_debtors_reminder(application)
+
+    def _schedule_debtors_reminder(self, application: Application) -> None:
+        """Schedula il job giornaliero che avvisa l'utente dei crediti in
+        sospeso (spese condivise). Non schedula nulla se manca
+        TELEGRAM_CHAT_ID (nessuna chat a cui mandare il promemoria) o se il
+        job-queue non è disponibile: il bot continua a funzionare
+        normalmente."""
+        if not self.notification_chat_id:
+            logger.warning(
+                "Promemoria crediti non attivo: TELEGRAM_CHAT_ID non impostato."
+            )
+            return
+
+        if application.job_queue is None:
+            logger.warning(
+                "Promemoria crediti non attivo: job_queue non disponibile "
+                "(installare l'extra python-telegram-bot[job-queue])."
+            )
+            return
+
+        reminder_time = parse_reminder_time(
+            os.getenv("DEBTORS_REMINDER_TIME")
+        ).replace(tzinfo=ZoneInfo("Europe/Rome"))
+        application.job_queue.run_daily(self._send_debtors_reminder, time=reminder_time)
 
     async def _post_shutdown(self, application: Application) -> None:
         """Eseguito da `run_polling` in fase di spegnimento: ferma il server
@@ -77,6 +106,33 @@ class TelegramBot:
         if self.ingest_server is not None:
             await self.ingest_server.stop()
             self.ingest_server = None
+
+    async def _send_debtors_reminder(self, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Job giornaliero: chiede all'API chi deve ancora restituire soldi
+        (spese condivise) e, se c'è qualcuno, manda un promemoria in chat.
+        Un fallimento del poll è silenzioso (nessun messaggio all'utente):
+        non deve generare rumore ogni giorno per un problema di rete."""
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{self.api_base_url}/api/agents/expenses/debtors",
+                    timeout=30.0,
+                )
+            response.raise_for_status()
+            result = response.json()
+        except Exception as error:
+            logger.error("Debtors request failed: %s", error)
+            return
+
+        if not result.get("success"):
+            logger.error("Debtors error: %s", result.get("error"))
+            return
+
+        text = format_debtors_reminder(result["month"], result["debtors"])
+        if text is None:
+            return
+
+        await context.bot.send_message(chat_id=int(self.notification_chat_id), text=text)
 
     def _setup_handlers(self):
         self.application.add_handler(

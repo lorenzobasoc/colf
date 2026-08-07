@@ -14,6 +14,9 @@ from .schemas import (
     CategorizeResponse,
     CategoryOption,
     CommitResponse,
+    DebtorGroup,
+    DebtorItem,
+    DebtorsResponse,
     ExpenseDraft,
     MessageRequest,
     NotificationRequest,
@@ -23,9 +26,11 @@ from .schemas import (
 from .service import (
     categorize_description,
     commit_expense,
+    list_debtors,
     parse_expense,
     parse_notification,
 )
+from .sharing import format_amount
 
 logger = logging.getLogger(__name__)
 
@@ -114,3 +119,26 @@ def categorize_message(
     except Exception as error:
         logger.exception("Failed to categorize description")
         return CategorizeResponse(category="", success=False, error=str(error))
+
+
+@router.get("/debtors", response_model=DebtorsResponse)
+def get_debtors(
+    sheets_client: gspread.Client = Depends(get_sheets_client),
+) -> DebtorsResponse:
+    try:
+        month, debtors = list_debtors(sheets_client)
+        groups = [
+            DebtorGroup(
+                name=debtor.name,
+                total=format_amount(debtor.total),
+                items=[
+                    DebtorItem(description=desc, amount=amount)
+                    for desc, amount in debtor.items
+                ],
+            )
+            for debtor in debtors
+        ]
+        return DebtorsResponse(month=month, debtors=groups, success=True)
+    except Exception as error:
+        logger.exception("Failed to read debtors")
+        return DebtorsResponse(success=False, error=str(error))

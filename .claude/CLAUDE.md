@@ -39,7 +39,9 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
   `POST /api/agents/expenses/parse-notification` (spesa da notifica bancaria: importo
   ed esercente via regex, categoria via LLM) e `POST /api/agents/expenses/categorize`
   (ricalcolo categoria quando l'esercente non è estraibile e l'utente scrive la
-  descrizione a mano).
+  descrizione a mano); `GET /api/agents/expenses/debtors` (sola lettura: legge il
+  blocco debitori del mese corrente `G25:I44` e ritorna chi deve soldi,
+  raggruppato per persona — consumato dal promemoria giornaliero del bot).
 - `service.py` — `parse_expense()` e `commit_expense()`.
 - `llm/categorizer.py` — modello GGUF 1.5B con `llama-cpp-python`, temp 0.
 - `llm/date_extractor.py` — estrazione data via LLM con few-shot dinamici.
@@ -129,10 +131,21 @@ dominio: chiama solo le API REST con `httpx.AsyncClient`.
 - `expense_card.py` — helper puri per scheda spesa (nessun I/O).
 - `invoice_card.py` — helper puri per scheda fattura: `format_invoice_card`,
   `invoice_main_keyboard`, `invoice_back_keyboard`, `INV_FIELD_PROMPTS`.
+- `debtors_reminder.py` — helper puri per il promemoria crediti: `format_debtors_reminder`
+  (testo del messaggio, `None` se nessun debitore) e `parse_reminder_time`
+  (parsing `"HH:MM"` con fallback a un default).
 
 **Comandi bot:** testo libero → spesa; `/fattura <nome>` → fattura; `/clienti` →
 lista clienti; `/scadenze` → fatture in scadenza 7gg; `/stato <numero>` → stato
 fattura.
+
+**Promemoria crediti (spese condivise):** job giornaliero (`JobQueue.run_daily`,
+richiede l'extra `python-telegram-bot[job-queue]`) che chiama
+`GET /api/agents/expenses/debtors`; se ci sono debitori manda un promemoria a
+`TELEGRAM_CHAT_ID`, altrimenti non manda nulla (nessun rumore). Orario da
+`DEBTORS_REMINDER_TIME` (default `09:00`, fuso `Europe/Rome`). Un fallimento
+del poll è silenzioso (solo log, nessun messaggio); il job non viene
+schedulato se `TELEGRAM_CHAT_ID` non è impostato.
 
 **Server di ingest (notifiche bancarie):** il bot espone, nello stesso processo
 che fa polling su Telegram, un piccolo server HTTP `aiohttp` per ricevere le
@@ -208,9 +221,10 @@ ingest delle notifiche bancarie (vedi sopra):
 
 ```
 INGEST_TOKEN=...       # segreto condiviso con l'app Android; se manca il server di ingest non parte
-TELEGRAM_CHAT_ID=...   # chat a cui mandare la scheda spesa generata da una notifica; se manca il server di ingest non parte
-# Opzionale (ha default):
+TELEGRAM_CHAT_ID=...   # chat a cui mandare la scheda spesa generata da una notifica (e il promemoria crediti); se manca il server di ingest non parte e il promemoria crediti non viene schedulato
+# Opzionali (hanno default):
 INGEST_PORT=8080
+DEBTORS_REMINDER_TIME=09:00   # HH:MM, fuso Europe/Rome — orario del promemoria crediti giornaliero
 ```
 
 ## Comandi

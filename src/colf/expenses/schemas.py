@@ -56,3 +56,21 @@ class CategorizeResponse(BaseModel):
     category: str
     success: bool
     error: str | None = None
+
+
+class DebtorItem(BaseModel):
+    description: str
+    amount: str
+
+
+class DebtorGroup(BaseModel):
+    name: str
+    total: str
+    items: list[DebtorItem]
+
+
+class DebtorsResponse(BaseModel):
+    month: str = ""
+    debtors: list[DebtorGroup] = []
+    success: bool
+    error: str | None = None

@@ -8,7 +8,7 @@ from google.oauth2.service_account import Credentials
 from ..config import Settings
 from .constants import ITALIAN_MONTHS, SHEET_HEADERS, SPREADSHEET_NAME_TEMPLATE
 from .domain import Expense
-from .sharing import append_debts
+from .sharing import DebtorSummary, append_debts, parse_debtors_block
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +83,15 @@ def add_debtors(
         value_input_option="USER_ENTERED",
     )
     logger.info("Debtors block updated on '%s': %s", month, updated)
+
+
+def read_debtors(month: str, client: gspread.Client) -> list[DebtorSummary]:
+    """Legge (senza scrivere) il blocco debitori del mese e lo ritorna
+    raggruppato per persona."""
+    worksheet = _open_month_worksheet(month, client)
+    last_row = DEBTORS_FIRST_ROW + DEBTORS_MAX_ROWS - 1
+    existing = worksheet.get(f"G{DEBTORS_FIRST_ROW}:I{last_row}")
+    return parse_debtors_block(existing)
 
 
 def read_categorized_descriptions(client: gspread.Client) -> list[tuple[str, str]]:

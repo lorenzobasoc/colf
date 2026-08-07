@@ -12,6 +12,7 @@ from .constants import CATEGORIES, FALLBACK_CATEGORY, ITALIAN_MONTHS
 from .domain import Expense
 from .notifications import extract_merchant, extract_notification_amount
 from .sharing import (
+    DebtorSummary,
     compute_shares,
     extract_share_clause,
     filter_names,
@@ -20,7 +21,7 @@ from .sharing import (
     split_names_fallback,
     strip_share_clause,
 )
-from .sheets import add_debtors, add_expense
+from .sheets import add_debtors, add_expense, read_debtors
 from .text_parsing import extract_amount, extract_description
 
 logger = logging.getLogger(__name__)
@@ -151,3 +152,10 @@ def categorize_description(
         return CATEGORIES[FALLBACK_CATEGORY]
     cached = category_cache.lookup(description) if category_cache else None
     return cached or categorize(description, llm)
+
+
+def list_debtors(client: gspread.Client) -> tuple[str, list[DebtorSummary]]:
+    """Legge (senza scrivere) il blocco debitori del mese corrente."""
+    month = ITALIAN_MONTHS[date.today().month - 1]
+    debtors = read_debtors(month, client)
+    return month, debtors
