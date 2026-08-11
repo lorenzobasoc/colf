@@ -50,7 +50,7 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
 - `sharing.py` — logica pura spese condivise: trigger regex ("da dividere
   con…"), guardrail nomi LLM + fallback split, divisione `Decimal` (l'utente
   assorbe il resto), `append_debts` per accodare le righe nel blocco debitori
-  (raggruppato per persona, nessuna somma).
+  (raggruppato per persona, nessuna somma, righe orfane preservate).
 - `llm/participants_extractor.py` — estrazione nomi partecipanti via LLM
   (few-shot, temp 0); l'output passa dal guardrail di `sharing.py`.
 - `domain.py` / `schemas.py` / `constants.py` — entità, modelli Pydantic, costanti.
@@ -67,7 +67,21 @@ della spesa, I=quota. Ogni spesa condivisa aggiunge, per ciascun debitore,
 una nuova riga in fondo al gruppo di quella persona (nome vuoto nelle righe
 successive alla prima) — nessuna somma/accumulo. La clausola va scritta in
 fondo al messaggio. Se il blocco debitori fallisce dopo la riga spesa, il
-bot avvisa (nessun rollback). Nel bot la scheda mostra totale/quote e il
+bot avvisa (nessun rollback).
+
+**Cancellazioni manuali del blocco debitori:** l'utente svuota a mano le righe
+dei debiti saldati, quindi il blocco letto prima di ogni scrittura può essere
+più corto (anche vuoto) o pieno di buchi. Due conseguenze nel codice:
+`add_debtors` riscrive **sempre l'intero range `G25:I44`**, con padding di
+righe vuote dopo i dati — scrivere solo le prime `len(updated)` righe lasciava
+sul foglio le righe più in basso come duplicati fantasma, che falsavano il
+promemoria crediti. E `append_debts` **preserva le righe orfane** (righe con
+descrizione/importo ma senza nome, che restano quando si cancella la riga che
+porta il nome): vengono riemesse invariate in cima al blocco, mai fuse con un
+gruppo, perché sono debiti reali e scartarle era perdita di dati silenziosa.
+Senza nome però non si sa chi deve i soldi: `parse_debtors_block` (lettura per
+il promemoria) le ignora finché l'utente non riscrive il nome a mano. Le
+orfane contano verso il limite di `DEBTORS_MAX_ROWS` (20 righe). Nel bot la scheda mostra totale/quote e il
 bottone ✏️ Partecipanti (`edit:participants`; "nessuno" → spesa normale).
 
 **Spese da notifica bancaria:** l'app Android (`src/colf-android/`) intercetta
