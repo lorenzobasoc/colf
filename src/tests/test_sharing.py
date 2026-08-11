@@ -198,12 +198,54 @@ class TestAppendDebts:
             ["Marco", "Regalo Anna", "3"],
         ]
 
-    def test_riga_nome_vuoto_prima_di_qualsiasi_nome_ignorata(self):
+    def test_orfane_preservate_in_cima_con_persona_esistente(self):
+        # L'utente ha cancellato a mano la riga con il nome ma non quella
+        # successiva dello stesso gruppo: quella riga resta "orfana" (dati
+        # senza nome) in cima al blocco. Prima veniva scartata (bug: debito
+        # reale che spariva in silenzio); ora va preservata invariata, e la
+        # nuova spesa per Giulio va comunque in fondo al SUO gruppo, non tra
+        # le orfane.
         existing = [["", "Fantasma", "1"], ["Giulio", "Pizza", "10"]]
         result = append_debts(existing, "Cinema", {"Giulio": Decimal("5")})
         assert result == [
+            ["", "Fantasma", "1"],
             ["Giulio", "Pizza", "10"],
             ["", "Cinema", "5"],
+        ]
+
+    def test_orfane_preservate_in_cima_con_persona_nuova(self):
+        existing = [
+            ["", "Fantasma1", "1"],
+            ["", "Fantasma2", "2"],
+            ["Giulio", "Pizza", "10"],
+        ]
+        result = append_debts(existing, "Cena", {"Marco": Decimal("7")})
+        assert result == [
+            ["", "Fantasma1", "1"],
+            ["", "Fantasma2", "2"],
+            ["Giulio", "Pizza", "10"],
+            ["Marco", "Cena", "7"],
+        ]
+
+    def test_righe_vuote_tra_le_orfane_compattate(self):
+        existing = [
+            ["", "Fantasma", "1"],
+            [],
+            ["Giulio", "Pizza", "10"],
+        ]
+        result = append_debts(existing, "Cinema", {"Giulio": Decimal("5")})
+        assert result == [
+            ["", "Fantasma", "1"],
+            ["Giulio", "Pizza", "10"],
+            ["", "Cinema", "5"],
+        ]
+
+    def test_blocco_di_sole_orfane_piu_persona_nuova(self):
+        existing = [["", "Fantasma", "1"]]
+        result = append_debts(existing, "Pizza", {"Marco": Decimal("7")})
+        assert result == [
+            ["", "Fantasma", "1"],
+            ["Marco", "Pizza", "7"],
         ]
 
     def test_importo_formato_italiano_preservato(self):

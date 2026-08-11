@@ -77,9 +77,14 @@ def add_debtors(
     if len(updated) > DEBTORS_MAX_ROWS:
         raise ValueError(f"Blocco debitori pieno (max {DEBTORS_MAX_ROWS} righe).")
 
+    # Scrive sempre l'intero blocco (padding di righe vuote comprese): righe
+    # cancellate a mano dall'utente più in basso del nuovo blocco vanno
+    # sovrascritte, altrimenti restano come duplicati fantasma.
+    padded = updated + [["", "", ""]] * (DEBTORS_MAX_ROWS - len(updated))
+
     worksheet.update(
-        range_name=f"G{DEBTORS_FIRST_ROW}:I{DEBTORS_FIRST_ROW + len(updated) - 1}",
-        values=updated,
+        range_name=f"G{DEBTORS_FIRST_ROW}:I{last_row}",
+        values=padded,
         value_input_option="USER_ENTERED",
     )
     logger.info("Debtors block updated on '%s': %s", month, updated)

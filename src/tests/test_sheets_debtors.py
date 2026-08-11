@@ -35,6 +35,11 @@ class FakeClient:
         return self._spreadsheet
 
 
+def _padded(rows: list[list[str]]) -> list[list[str]]:
+    """Helper di test: righe attese seguite da padding vuoto fino a 20 righe."""
+    return rows + [["", "", ""]] * (20 - len(rows))
+
+
 class TestAddDebtors:
     def test_scrive_blocco_da_g25(self):
         ws = FakeWorksheet([])
@@ -45,20 +50,69 @@ class TestAddDebtors:
             FakeClient(ws),
         )
         assert ws.updates == [
-            ("G25:I26", [["Giulio", "Pizza", "10"], ["Bea", "Pizza", "10"]])
+            (
+                "G25:I44",
+                _padded([["Giulio", "Pizza", "10"], ["Bea", "Pizza", "10"]]),
+            )
         ]
 
     def test_persona_esistente_riceve_riga_sotto_senza_somma(self):
         ws = FakeWorksheet([["Giulio", "Pizza", "10"]])
         add_debtors("Luglio", "Cinema", {"Giulio": Decimal("5")}, FakeClient(ws))
         assert ws.updates == [
-            ("G25:I26", [["Giulio", "Pizza", "10"], ["", "Cinema", "5"]])
+            (
+                "G25:I44",
+                _padded([["Giulio", "Pizza", "10"], ["", "Cinema", "5"]]),
+            )
         ]
 
     def test_blocco_pieno_solleva(self):
         ws = FakeWorksheet([[f"Nome{i}", "Cena", "1"] for i in range(20)])
         with pytest.raises(ValueError, match="pieno"):
             add_debtors("Luglio", "Cena", {"Nuovo": Decimal("5")}, FakeClient(ws))
+        assert ws.updates == []
+
+    def test_righe_vuote_in_mezzo_vengono_sovrascritte_con_padding(self):
+        """Riproduce il bug: l'utente ha cancellato a mano le righe dei
+        debiti saldati (celle vuote in mezzo al blocco). Il blocco
+        aggiornato è compattato da append_debts, ma la scrittura deve
+        coprire l'intero range G25:I44 così che le vecchie righe fisiche
+        sotto il nuovo blocco non restino come duplicati fantasma."""
+        ws = FakeWorksheet(
+            [
+                ["", "", ""],
+                ["", "", ""],
+                ["Giulio", "Pizza", "10"],
+                ["", "Cinema", "5"],
+            ]
+        )
+        add_debtors("Luglio", "Aperitivo", {"Giulio": Decimal("8")}, FakeClient(ws))
+        assert ws.updates == [
+            (
+                "G25:I44",
+                _padded(
+                    [
+                        ["Giulio", "Pizza", "10"],
+                        ["", "Cinema", "5"],
+                        ["", "Aperitivo", "8"],
+                    ]
+                ),
+            )
+        ]
+
+    def test_blocco_vuoto_scrive_padding_completo(self):
+        """Caso 'ho cancellato tutto': existing == [] più una nuova spesa
+        deve comunque scrivere l'intero blocco G25:I44 con padding."""
+        ws = FakeWorksheet([])
+        add_debtors(
+            "Luglio",
+            "Pizza",
+            {"Giulio": Decimal("10")},
+            FakeClient(ws),
+        )
+        assert ws.updates == [
+            ("G25:I44", _padded([["Giulio", "Pizza", "10"]]))
+        ]
 
 
 SHARED = Expense(

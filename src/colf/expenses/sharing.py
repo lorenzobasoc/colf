@@ -147,8 +147,15 @@ def append_debts(
     colonna nome vuota. Nessuna somma: ogni spesa condivisa aggiunge, per
     ciascun debitore, una nuova riga (descrizione, quota) in fondo al gruppo
     di quella persona (o crea un nuovo gruppo in coda se la persona non
-    esiste ancora). Le righe vuote e quelle con nome vuoto che precedono
-    qualsiasi nome vengono ignorate/compattate."""
+    esiste ancora). Le righe interamente vuote vengono ignorate/compattate.
+
+    Le righe con nome vuoto che precedono qualsiasi nome sono "orfane": nel
+    foglio l'utente cancella a mano le righe già saldate, e se cancella la
+    riga con il nome (la prima del gruppo) lasciando le successive, quelle
+    restano senza nome ma rappresentano ancora un debito reale. Vengono
+    riemesse invariate in cima al blocco risultante, senza essere fuse con
+    nessun gruppo: non appartengono a nessuna persona nota."""
+    orphans: list[list[str]] = []
     groups: list[list[list[str]]] = []
     index: dict[str, int] = {}
     current: list[list[str]] | None = None
@@ -165,6 +172,7 @@ def append_debts(
             groups.append(current)
         else:
             if current is None:
+                orphans.append(["", desc, amount])
                 continue
             current.append(["", desc, amount])
 
@@ -177,4 +185,4 @@ def append_debts(
             index[key] = len(groups)
             groups.append([[name, description, format_amount(quota)]])
 
-    return [row for group in groups for row in group]
+    return orphans + [row for group in groups for row in group]
