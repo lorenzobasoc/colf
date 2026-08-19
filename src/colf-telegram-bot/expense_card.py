@@ -104,11 +104,15 @@ def apply_field_value(draft: dict, field: str, text: str) -> str | None:
     return None
 
 
-def format_card(draft: dict) -> str:
+def format_card(draft: dict, index: int | None = None, total: int | None = None) -> str:
+    header = "📝 Controlla la spesa"
+    if index is not None and total is not None and total > 1:
+        header = f"{header} ({index}/{total})"
+
     participants = draft.get("participants") or []
     if not participants:
         return (
-            "📝 Controlla la spesa\n\n"
+            f"{header}\n\n"
             f"Descrizione: {draft['description'] or '(vuota)'}\n"
             f"Importo: {draft['amount'] or '(non rilevato)'}\n"
             f"Categoria: {draft['category']}\n"
@@ -116,8 +120,8 @@ def format_card(draft: dict) -> str:
             "Tutto giusto?"
         )
 
-    total = draft.get("total_amount") or ""
-    quotas = share_quotas(total, len(participants))
+    total_amount = draft.get("total_amount") or ""
+    quotas = share_quotas(total_amount, len(participants))
     if quotas is None:
         quota_lines = "Quote: (importo non rilevato)"
     else:
@@ -128,15 +132,36 @@ def format_card(draft: dict) -> str:
             f"Debitori: {debtors}"
         )
     return (
-        "📝 Controlla la spesa\n\n"
+        f"{header}\n\n"
         f"Descrizione: {draft['description'] or '(vuota)'}\n"
-        f"Importo totale: {total or '(non rilevato)'}\n"
+        f"Importo totale: {total_amount or '(non rilevato)'}\n"
         f"👥 Condivisa con: {', '.join(participants)}\n"
         f"{quota_lines}\n"
         f"Categoria: {draft['category']}\n"
         f"Data: {draft['day']} {draft['month']}\n\n"
         "Tutto giusto?"
     )
+
+
+def start_batch(drafts: list[dict]) -> tuple[dict, dict] | None:
+    """Prepara lo stato di un batch di spese da mostrare una alla volta.
+    Ritorna (primo_draft, stato) con stato = {"queue", "batch_index",
+    "batch_total"}, o None se `drafts` è vuota."""
+    if not drafts:
+        return None
+    return drafts[0], {"queue": drafts[1:], "batch_index": 1, "batch_total": len(drafts)}
+
+
+def advance_batch(state: dict) -> dict | None:
+    """Estrae il prossimo draft dalla coda del batch (chiave "queue" di
+    `state`), aggiornando "batch_index" in place. Ritorna None se la coda è
+    vuota o assente (batch finito, o nessun batch in corso)."""
+    queue = state.get("queue")
+    if not queue:
+        return None
+    draft = queue.pop(0)
+    state["batch_index"] = state.get("batch_index", 1) + 1
+    return draft
 
 
 def main_keyboard(shared: bool = False) -> InlineKeyboardMarkup:

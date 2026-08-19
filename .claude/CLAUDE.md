@@ -42,11 +42,13 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
   descrizione a mano); `GET /api/agents/expenses/debtors` (sola lettura: legge il
   blocco debitori del mese corrente `G25:I44` e ritorna chi deve soldi,
   raggruppato per persona — consumato dal promemoria giornaliero del bot).
-- `service.py` — `parse_expense()` e `commit_expense()`.
+- `service.py` — `parse_expense()`, `parse_expenses()` (più spese in un messaggio)
+  e `commit_expense()`.
 - `llm/categorizer.py` — modello GGUF 1.5B con `llama-cpp-python`, temp 0.
 - `llm/date_extractor.py` — estrazione data via LLM con few-shot dinamici.
 - `sheets.py` — client `gspread`; `add_expense()` scrive sul Google Sheet.
-- `text_parsing.py` — estrazione importo e descrizione via regex.
+- `text_parsing.py` — estrazione importo e descrizione via regex; `split_messages()`
+  spezza un messaggio in più spese (separatori `\n` e `;`, nessun LLM).
 - `sharing.py` — logica pura spese condivise: trigger regex ("da dividere
   con…"), guardrail nomi LLM + fallback split, divisione `Decimal` (l'utente
   assorbe il resto), `append_debts` per accodare le righe nel blocco debitori
@@ -55,8 +57,23 @@ asincrono carica LLM, client Google Sheets e connessione SQLite in `app.state`.
   (few-shot, temp 0); l'output passa dal guardrail di `sharing.py`.
 - `domain.py` / `schemas.py` / `constants.py` — entità, modelli Pydantic, costanti.
 
-**Flusso spese:** messaggio → `parse_expense` (data LLM, importo/descrizione regex,
-categoria LLM) → scheda conferma bot → conferma → `commit_expense` → Google Sheets.
+**Flusso spese:** messaggio → `parse_expenses` → per ogni segmento `parse_expense`
+(data LLM, importo/descrizione regex, categoria LLM) → scheda conferma bot → conferma
+→ `commit_expense` → Google Sheets.
+
+**Più spese in un messaggio:** `POST /api/agents/expenses/parse` ritorna `drafts`
+(lista, ordine del messaggio), non un singolo `draft`. Lo split è deterministico e
+sta lato API (il bot non ha logica di dominio): `split_messages` taglia su newline
+e `;`, ogni segmento passa dal parsing normale — quindi una clausola "da dividere
+con…" vale solo per la sua riga. Il bot mostra le schede **una alla volta**
+(`start_batch`/`advance_batch` in `expense_card.py`, stato in `chat_data`:
+`queue`/`batch_index`/`batch_total`) con l'indicatore di progresso `(2/3)`
+nell'header, mostrato solo se il batch ha più di una spesa. Conferma riuscita →
+riepilogo e apertura della scheda successiva; Annulla → annulla solo la spesa
+corrente e passa alla prossima; errore di commit → la coda **non** avanza (la
+scheda resta riproponibile). `POST /api/agents/expenses/parse-notification`
+continua a rispondere con `draft` singolare: il flusso da notifica bancaria mostra
+sempre una sola scheda, senza indicatore di progresso.
 
 **Spese condivise:** "Pizza 30 da dividere con Giulio e Bea" → il totale è
 diviso per i partecipanti (utente incluso, `ROUND_HALF_UP`, l'utente assorbe

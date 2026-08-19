@@ -22,7 +22,7 @@ from .sharing import (
     strip_share_clause,
 )
 from .sheets import add_debtors, add_expense, read_debtors
-from .text_parsing import extract_amount, extract_description
+from .text_parsing import extract_amount, extract_description, split_messages
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,18 @@ def parse_expense(
     )
     logger.info("Parsed expense draft: %s", expense)
     return expense
+
+
+def parse_expenses(
+    message: str, *, llm: Llama, category_cache: CategoryCache | None = None
+) -> list[Expense]:
+    """Divide il messaggio in più segmenti (una spesa per riga/`;`) e applica
+    parse_expense a ciascuno, nell'ordine originale. Nessuna gestione parziale:
+    un'eccezione in un segmento si propaga al chiamante."""
+    return [
+        parse_expense(segment, llm=llm, category_cache=category_cache)
+        for segment in split_messages(message)
+    ]
 
 
 def commit_expense(

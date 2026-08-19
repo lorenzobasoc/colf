@@ -1,5 +1,8 @@
 import re
 
+# Separatori per più spese in un unico messaggio Telegram.
+_MESSAGE_SPLIT_PATTERN = re.compile(r"[\n;]+")
+
 # Matches numbers with optional decimal (comma or dot) and optional currency symbol.
 _AMOUNT_WITH_CURRENCY_PATTERN = re.compile(r"\d+([.,]\d+)?\s*(€|\$|£|euro|Euro)?")
 # Collapses multiple spaces into one for final cleanup.
@@ -43,6 +46,12 @@ def strip_amount(text: str) -> str:
     if idx == -1:
         return text
     return _WHITESPACE_PATTERN.sub(" ", text[:idx] + text[idx + len(amount) :]).strip()
+
+
+def split_messages(text: str) -> list[str]:
+    """Divide un messaggio in più segmenti spesa, uno per riga/`;`.
+    Split deterministico, nessun LLM. Segmenti vuoti/solo-whitespace scartati."""
+    return [segment.strip() for segment in _MESSAGE_SPLIT_PATTERN.split(text) if segment.strip()]
 
 
 def extract_amount(text: str) -> str | None:

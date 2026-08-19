@@ -1,6 +1,6 @@
 from colf.expenses.category_cache import CategoryCache
 from colf.expenses.domain import Expense
-from colf.expenses.service import commit_expense, parse_expense
+from colf.expenses.service import commit_expense, parse_expense, parse_expenses
 
 
 class FakeLlm:
@@ -117,3 +117,27 @@ class TestParseExpenseCategoryCache:
 
         assert expense.category == "🍺 Bar"
         assert llm.categorizer_calls == 0
+
+
+class TestParseExpenses:
+    def test_messaggio_multiriga_ordine_corretto(self):
+        expenses = parse_expenses(
+            "Pizza 30\nSpesa esselunga 42,50", llm=FakeLlm()
+        )
+        assert len(expenses) == 2
+        assert expenses[0].description == "Pizza"
+        assert expenses[1].description == "Spesa esselunga"
+
+    def test_messaggio_singolo_identico_a_parse_expense(self):
+        [expense] = parse_expenses("Spesa esselunga 42,50", llm=FakeLlm())
+        assert expense == parse_expense("Spesa esselunga 42,50", llm=FakeLlm())
+
+    def test_condivisione_si_applica_solo_alla_sua_riga(self):
+        expenses = parse_expenses(
+            "Pizza 30 da dividere con Giulio e Bea\nSpesa esselunga 42,50",
+            llm=FakeLlm(),
+        )
+        assert expenses[0].participants == ("Giulio", "Bea")
+        assert expenses[0].amount == "10"
+        assert expenses[1].participants == ()
+        assert expenses[1].amount == "42,50"

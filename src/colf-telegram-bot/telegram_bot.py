@@ -18,11 +18,13 @@ from telegram.ext import (
 from debtors_reminder import format_debtors_reminder, parse_reminder_time
 from expense_card import (
     FIELD_PROMPTS,
+    advance_batch,
     apply_field_value,
     back_only_keyboard,
     category_keyboard,
     format_card,
     main_keyboard,
+    start_batch,
 )
 from invoice_card import (
     INV_FIELD_PROMPTS,
@@ -153,15 +155,47 @@ class TelegramBot:
             "awaiting_field",
             "from_notification",
             "needs_category_refresh",
+            "queue",
+            "batch_index",
+            "batch_total",
         ):
             context.chat_data.pop(key, None)
+
+    @staticmethod
+    def _progress(chat_data: dict) -> tuple[int | None, int | None]:
+        """Indice/totale del batch corrente, per l'indicatore di progresso
+        nella card. (None, None) fuori da un batch (spesa singola dal testo,
+        o spesa da notifica bancaria: nessuna delle due imposta queste
+        chiavi)."""
+        return chat_data.get("batch_index"), chat_data.get("batch_total")
+
+    def _advance_batch(self, context: ContextTypes.DEFAULT_TYPE) -> dict | None:
+        """Passa al prossimo draft in coda nel batch, se presente. Se la coda
+        è vuota o non c'è un batch in corso, pulisce tutto lo stato residuo
+        della spesa e ritorna None (batch finito)."""
+        next_draft = advance_batch(context.chat_data)
+        if next_draft is None:
+            self._clear(context)
+            return None
+        context.chat_data["draft"] = next_draft
+        context.chat_data["awaiting_field"] = None
+        return next_draft
+
+    async def _show_batch_card(self, chat, context: ContextTypes.DEFAULT_TYPE, draft: dict) -> None:
+        """Manda la card del prossimo draft in coda come nuovo messaggio
+        nella stessa chat."""
+        card = await chat.send_message(
+            format_card(draft, *self._progress(context.chat_data)),
+            reply_markup=main_keyboard(bool(draft.get("participants"))),
+        )
+        context.chat_data["card_message_id"] = card.message_id
 
     @staticmethod
     def _clear_invoice(context: ContextTypes.DEFAULT_TYPE) -> None:
         for key in ("invoice_draft", "invoice_card_message_id", "invoice_awaiting_field"):
             context.chat_data.pop(key, None)
 
-    # ── Expense handlers (unchanged) ──────────────────────────────────────────
+    # ── Expense handlers ──────────────────────────────────────────────────────
 
     async def handle_message(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -231,13 +265,22 @@ class TelegramBot:
             )
             return
 
-        context.chat_data["draft"] = result["draft"]
+        started = start_batch(result["drafts"])
+        if started is None:
+            await self._replace_placeholder(
+                thinking, update, "❌ Errore nel processare il messaggio. Riprova."
+            )
+            return
+
+        draft, batch_state = started
+        context.chat_data["draft"] = draft
         context.chat_data["categories"] = result["categories"]
+        context.chat_data.update(batch_state)
         card = await self._replace_placeholder(
             thinking,
             update,
-            format_card(result["draft"]),
-            reply_markup=main_keyboard(bool(result["draft"].get("participants"))),
+            format_card(draft, *self._progress(context.chat_data)),
+            reply_markup=main_keyboard(bool(draft.get("participants"))),
         )
         context.chat_data["card_message_id"] = card.message_id
 
@@ -257,7 +300,10 @@ class TelegramBot:
             await context.bot.edit_message_text(
                 chat_id=update.effective_chat.id,
                 message_id=context.chat_data["card_message_id"],
-                text=f"{format_card(draft)}\n\n{FIELD_PROMPTS[field]}\n\n{error}",
+                text=(
+                    f"{format_card(draft, *self._progress(context.chat_data))}\n\n"
+                    f"{FIELD_PROMPTS[field]}\n\n{error}"
+                ),
                 reply_markup=back_only_keyboard(),
             )
             return
@@ -275,7 +321,7 @@ class TelegramBot:
         await context.bot.edit_message_text(
             chat_id=update.effective_chat.id,
             message_id=context.chat_data["card_message_id"],
-            text=format_card(draft),
+            text=format_card(draft, *self._progress(context.chat_data)),
             reply_markup=main_keyboard(bool(draft.get("participants"))),
         )
 
@@ -574,7 +620,7 @@ class TelegramBot:
             await self._handle_invoice_callback(update, context)
             return
 
-        # ── Expense callbacks (unchanged) ──────────────────────────────────
+        # ── Expense callbacks ────────────────────────────────────────────────
         chat_data = context.chat_data
 
         if not chat_data.get("draft"):
@@ -589,8 +635,17 @@ class TelegramBot:
         if data == "confirm":
             await self._commit(update, context)
         elif data == "cancel":
-            self._clear(context)
-            await query.edit_message_text("Spesa annullata.")
+            index, total = self._progress(chat_data)
+            cancel_text = (
+                f"Spesa {index}/{total} annullata."
+                if total and total > 1
+                else "Spesa annullata."
+            )
+            chat = query.message.chat
+            next_draft = self._advance_batch(context)
+            await query.edit_message_text(cancel_text)
+            if next_draft is not None:
+                await self._show_batch_card(chat, context, next_draft)
         elif data == "edit:category":
             await query.edit_message_reply_markup(
                 reply_markup=category_keyboard(chat_data["categories"])
@@ -602,19 +657,19 @@ class TelegramBot:
                 draft["category"],
             )
             await query.edit_message_text(
-                format_card(draft),
+                format_card(draft, *self._progress(chat_data)),
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
         elif data.startswith("edit:"):
             field = data[len("edit:"):]
             chat_data["awaiting_field"] = field
             await query.edit_message_text(
-                f"{format_card(draft)}\n\n{FIELD_PROMPTS[field]}",
+                f"{format_card(draft, *self._progress(chat_data))}\n\n{FIELD_PROMPTS[field]}",
                 reply_markup=back_only_keyboard(),
             )
         elif data == "back":
             await query.edit_message_text(
-                format_card(draft),
+                format_card(draft, *self._progress(chat_data)),
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
 
@@ -704,7 +759,7 @@ class TelegramBot:
         self._clear_invoice(context)
         await self._finalize_card(query, f"✅ {result['response']}")
 
-    # ── Expense commit (unchanged) ────────────────────────────────────────────
+    # ── Expense commit ────────────────────────────────────────────────────────
 
     async def _commit(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
@@ -725,7 +780,8 @@ class TelegramBot:
             logger.error("Commit request failed: %s", error)
             card = await self._finalize_card(
                 query,
-                f"{format_card(draft)}\n\n❌ Errore nel salvare. Riprova con Conferma.",
+                f"{format_card(draft, *self._progress(context.chat_data))}\n\n"
+                "❌ Errore nel salvare. Riprova con Conferma.",
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
             context.chat_data["card_message_id"] = card.message_id
@@ -736,15 +792,18 @@ class TelegramBot:
             logger.error("Commit error: %s", error)
             card = await self._finalize_card(
                 query,
-                f"{format_card(draft)}\n\n❌ Errore nel salvare: {error}\n"
-                "Riprova con Conferma.",
+                f"{format_card(draft, *self._progress(context.chat_data))}\n\n"
+                f"❌ Errore nel salvare: {error}\nRiprova con Conferma.",
                 reply_markup=main_keyboard(bool(draft.get("participants"))),
             )
             context.chat_data["card_message_id"] = card.message_id
             return
 
-        self._clear(context)
+        chat = query.message.chat
+        next_draft = self._advance_batch(context)
         await self._finalize_card(query, f"✅ {result['response']}")
+        if next_draft is not None:
+            await self._show_batch_card(chat, context, next_draft)
 
     def run(self):
         """Avvia il bot in polling.

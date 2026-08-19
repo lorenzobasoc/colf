@@ -1,11 +1,13 @@
 from expense_card import (
     FIELD_PROMPTS,
+    advance_batch,
     apply_field_value,
     format_card,
     main_keyboard,
     parse_participants_input,
     recalc_share,
     share_quotas,
+    start_batch,
 )
 
 
@@ -86,6 +88,84 @@ class TestFormatCard:
         card = format_card(make_draft(total_amount=None, amount=""))
         assert "(non rilevato)" in card
         assert "👥 Condivisa con: Giulio, Bea" in card
+
+    def test_indicatore_progresso_con_batch(self):
+        draft = {
+            "day": 2,
+            "month": "Luglio",
+            "description": "Caffè",
+            "category": "🍺 Bar",
+            "amount": "1,20",
+        }
+        card = format_card(draft, 2, 3)
+        assert "📝 Controlla la spesa (2/3)" in card
+
+    def test_nessun_indicatore_con_totale_uno(self):
+        draft = {
+            "day": 2,
+            "month": "Luglio",
+            "description": "Caffè",
+            "category": "🍺 Bar",
+            "amount": "1,20",
+        }
+        card = format_card(draft, 1, 1)
+        assert "📝 Controlla la spesa\n\n" in card
+        assert "(1/1)" not in card
+
+    def test_nessun_indicatore_senza_parametri(self):
+        draft = {
+            "day": 2,
+            "month": "Luglio",
+            "description": "Caffè",
+            "category": "🍺 Bar",
+            "amount": "1,20",
+        }
+        assert format_card(draft) == format_card(draft, None, None)
+        assert "(" not in format_card(draft).split("\n\n")[0]
+
+    def test_corpo_scheda_invariato_con_indicatore(self):
+        draft = make_draft()
+        senza = format_card(draft)
+        con = format_card(draft, 2, 3)
+        # Solo l'intestazione cambia, il resto del corpo è identico.
+        assert senza.split("\n\n", 1)[1] == con.split("\n\n", 1)[1]
+
+
+class TestStartBatch:
+    def test_lista_vuota(self):
+        assert start_batch([]) is None
+
+    def test_primo_draft_e_stato(self):
+        drafts = [make_draft(description="Pizza"), make_draft(description="Caffè")]
+        draft, state = start_batch(drafts)
+        assert draft["description"] == "Pizza"
+        assert state == {
+            "queue": [drafts[1]],
+            "batch_index": 1,
+            "batch_total": 2,
+        }
+
+    def test_singolo_draft(self):
+        drafts = [make_draft()]
+        draft, state = start_batch(drafts)
+        assert draft == drafts[0]
+        assert state == {"queue": [], "batch_index": 1, "batch_total": 1}
+
+
+class TestAdvanceBatch:
+    def test_coda_vuota_ritorna_none(self):
+        assert advance_batch({"queue": [], "batch_index": 1, "batch_total": 1}) is None
+
+    def test_stato_assente_ritorna_none(self):
+        assert advance_batch({}) is None
+
+    def test_estrae_prossimo_e_aggiorna_indice(self):
+        second = make_draft(description="Caffè")
+        state = {"queue": [second], "batch_index": 1, "batch_total": 2}
+        draft = advance_batch(state)
+        assert draft == second
+        assert state["batch_index"] == 2
+        assert state["queue"] == []
 
 
 class TestMainKeyboard:

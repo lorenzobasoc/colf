@@ -21,7 +21,7 @@ class CategoryOption(BaseModel):
 
 
 class ParseResponse(BaseModel):
-    draft: ExpenseDraft | None = None
+    drafts: list[ExpenseDraft] = []
     categories: list[CategoryOption] = []
     success: bool
     error: str | None = None

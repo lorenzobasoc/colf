@@ -27,7 +27,7 @@ from .service import (
     categorize_description,
     commit_expense,
     list_debtors,
-    parse_expense,
+    parse_expenses,
     parse_notification,
 )
 from .sharing import format_amount
@@ -48,9 +48,9 @@ def parse_message(
     cache: CategoryCache = Depends(get_category_cache),
 ) -> ParseResponse:
     try:
-        expense = parse_expense(payload.message, llm=llm, category_cache=cache)
-        draft = ExpenseDraft(**asdict(expense))
-        return ParseResponse(draft=draft, categories=_category_options(), success=True)
+        expenses = parse_expenses(payload.message, llm=llm, category_cache=cache)
+        drafts = [ExpenseDraft(**asdict(expense)) for expense in expenses]
+        return ParseResponse(drafts=drafts, categories=_category_options(), success=True)
     except Exception as error:
         logger.exception("Failed to parse expense")
         return ParseResponse(success=False, error=str(error))
