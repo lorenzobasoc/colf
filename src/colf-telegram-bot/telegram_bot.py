@@ -247,7 +247,7 @@ class TelegramBot:
                 response = await client.post(
                     f"{self.api_base_url}/api/agents/expenses/parse",
                     json={"message": text},
-                    timeout=120.0,
+                    timeout=600.0,
                 )
             response.raise_for_status()
             result = response.json()
