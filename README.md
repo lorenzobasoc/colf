@@ -30,3 +30,10 @@ A small quantised model running on my own hardware handles:
 ---
 
 More features will come over time.
+
+## Notion expense import
+
+A separate VPS worker imports a plain-text Notion page every 30 minutes, uses
+Claude Code subscription login for categories, converts to EUR and marks each
+imported line with ✅. It does not load the local LLM. See
+[setup and recovery instructions](docs/notion-sync-setup.md).

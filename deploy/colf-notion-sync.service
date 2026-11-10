@@ -1,0 +1,19 @@
+[Unit]
+Description=Import Colf expenses from Notion
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=colf
+Group=colf
+WorkingDirectory=/opt/colf
+EnvironmentFile=/etc/colf/notion-sync.env
+Environment=PYTHONPATH=/opt/colf/src
+Environment=SYNC_STATE_PATH=/var/lib/colf/notion-sync.db
+Environment=SYNC_LOCK_PATH=/var/lib/colf/notion-sync.lock
+StateDirectory=colf
+UMask=0077
+ExecStart=/opt/colf/.venv/bin/python -m colf.notion_sync.run
+TimeoutStartSec=15min
+NoNewPrivileges=true

@@ -1,0 +1,10 @@
+[Unit]
+Description=Check Notion expenses every 30 minutes
+
+[Timer]
+OnCalendar=*-*-* *:00,30:00
+Persistent=true
+Unit=colf-notion-sync.service
+
+[Install]
+WantedBy=timers.target
