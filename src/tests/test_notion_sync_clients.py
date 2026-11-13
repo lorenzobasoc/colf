@@ -62,7 +62,8 @@ def test_eur_without_network_and_bad_rates():
             get_rate('THB', date(2026, 11, 9), request=lambda *args: {'base':'THB','quote':'EUR','date':day,'rate':Decimal(rate)})
 
 
-def test_claude_validates_output_and_uses_no_tools(monkeypatch):
+@pytest.mark.parametrize(('category', 'display'), [('Cibo fuori', '🍔 Cibo fuori'), ('Alloggi', '🏠 Alloggi')])
+def test_claude_validates_output_and_uses_no_tools(monkeypatch, category, display):
     for name in list(__import__('os').environ):
         if name.startswith('ANTHROPIC_') or name.startswith('CLAUDE_CODE_USE_'):
             monkeypatch.delenv(name)
@@ -73,9 +74,13 @@ def test_claude_validates_output_and_uses_no_tools(monkeypatch):
         assert command[command.index('--model') + 1] == 'claude-haiku-5-5'
         assert command[command.index('--tools') + 1] == ''
         assert '--bare' not in command
+        schema = json.loads(command[command.index('--json-schema') + 1])
+        allowed = schema['properties']['categories']['items']['properties']['category']['enum']
+        assert category in allowed
+        assert 'Casa' not in allowed
         assert 'cena' in kwargs['input']
-        return SimpleNamespace(returncode=0, stdout=json.dumps({'structured_output': {'categories': [{'id': expenses[0].source_id, 'category': 'Cibo fuori'}]}}))
-    assert classify(expenses, runner=run)[expenses[0].source_id] == '🍔 Cibo fuori'
+        return SimpleNamespace(returncode=0, stdout=json.dumps({'structured_output': {'categories': [{'id': expenses[0].source_id, 'category': category}]}}))
+    assert classify(expenses, runner=run)[expenses[0].source_id] == display
     with pytest.raises(ValueError):
         classify(expenses, runner=lambda *a, **kw: SimpleNamespace(returncode=0, stdout='{"structured_output":{"categories":[]}}'))
 

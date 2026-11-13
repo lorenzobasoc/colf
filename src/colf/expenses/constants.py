@@ -4,7 +4,7 @@ CATEGORIES: dict[str, str] = {
     "Bar": "🍺 Bar",
     "Trasporti": "🚌 Trasporti",
     "Auto": "🚗 Auto",
-    "Casa": "🏠 Casa",
+    "Alloggi": "🏠 Alloggi",
     "Sanita": "🚑 Sanità",
     "Vestiti": "👕 Vestiti",
     "Abbonamenti": "🎫 Abbonamenti",
