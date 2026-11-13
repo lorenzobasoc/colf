@@ -30,13 +30,13 @@ blocchi importati; se rimangono spese da importare, conservare il loro giorno e
 la proprietà Valuta. Non modificare acquisti importati per correggere il foglio:
 le correzioni contabili si effettuano manualmente.
 
-Per nuove spese usare nuovi paragrafi Notion. Gli a capo nello stesso paragrafo
-sono supportati, ma sostituire una riga importata con un nuovo acquisto nello
-stesso blocco può essere indistinguibile da una modifica. Il worker si ferma
-quando riconosce questa ambiguità, incluso un tick rimosso dopo conferma locale.
-Non rimuovere i tick dalle spese che vuoi conservare in Notion. La cancellazione
-di altre righe non cambia l'identità di una spesa. Se cancelli un'intera pagina,
-rimuoverne anche l'ID dalla configurazione.
+Il worker importa le spese senza ✅ e ignora quelle spuntate, anche se modificate.
+Modificare o cancellare una spesa importata non blocca le nuove e non aggiorna
+il foglio. Una riga modificata senza tick viene trattata come una nuova spesa.
+Se manca il tick su una spesa identica già nel registro Google, il worker lo
+ripristina senza duplicarla. Per acquisti distinti ma identici usare nuovi
+paragrafi Notion. La cancellazione di altre righe non cambia l'identità di una
+spesa. Se cancelli un'intera pagina, rimuoverne anche l'ID dalla configurazione.
 
 ## Importi e layout
 
@@ -208,3 +208,12 @@ con allineamento a destra; non cambiano font, bordi o importi esistenti.
 Le dodici celle delle sei spese e quote Bea sono state corrette con il formato
 originale di D43 e verificate tramite API: pattern identico, spaziatura
 contabile ripristinata, valori numerici e registro invariati.
+
+## Modifiche alle spese spuntate — 2026-11-13
+
+Rimosso il blocco della pagina quando cambia una spesa già importata: le righe
+spuntate vengono ignorate e quelle senza tick continuano a essere importate.
+Il registro Google conserva il recupero senza duplicati quando manca solo il
+tick. Applicato su `develop`; esecuzione manuale completata con sette spese
+importate. Backup del codice precedente e del journal prima del rilancio in
+`/var/lib/colf/backups/tick-policy-20261113T081959Z`.

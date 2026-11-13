@@ -101,16 +101,27 @@ def test_lost_journal_fails_closed_instead_of_duplicating(tmp_path):
     assert store.writes == 1
 
 
-def test_edit_imported_expense_and_removed_tick_are_conflicts(tmp_path):
+@pytest.mark.parametrize('edited', ['Cena 99 B ✅', 'Cena 99 B'])
+def test_edit_imported_expense_does_not_block_unchecked_expenses(tmp_path, edited):
     notion, store = Notion(), Store()
     with Journal(tmp_path / 'sync.db') as journal:
         sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=classifier)
-        notion.text = 'Valuta: EUR\n9\nCena 99 B'
-        with pytest.raises(ValueError, match='modificat'):
-            sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=classifier)
+        notion.text = f'Valuta: EUR\n9\n{edited}\nCaffe 2'
+        preview = sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=classifier)
+        assert [r['description'] for r in preview] == (['Caffe'] if edited.endswith('✅') else ['Cena', 'Caffe'])
+        assert all(line.endswith('✅') for line in notion.text.split('\n')[2:])
+        assert next(iter(store.records.values()))['amount'] == '12'
+        assert sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=lambda e: pytest.fail()) == []
+    assert store.writes == 2
+
+
+def test_removed_tick_is_restored_without_duplicate_import(tmp_path):
+    notion, store = Notion(), Store()
+    with Journal(tmp_path / 'sync.db') as journal:
+        sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=classifier)
         notion.text = 'Valuta: EUR\n9\nCena 12 B'
-        with pytest.raises(ValueError, match='tick'):
-            sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=classifier)
+        assert sync_page('p', notion, journal, lambda y: store, date(2026, 11, 10), classifier=lambda e: pytest.fail()) == []
+        assert notion.text.endswith('✅')
     assert store.writes == 1
 
 

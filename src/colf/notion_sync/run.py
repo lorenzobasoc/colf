@@ -48,14 +48,6 @@ class Journal(AbstractContextManager):
         active = {row['source']: dict(row) for row in self.db.execute(
             'SELECT * FROM observed WHERE page=? AND active=1', (page,))}
         result = []
-        current_keys = {e.source_id for e in expenses}
-        removed_blocks = {entry['block'] for key, entry in active.items()
-                          if key not in current_keys and entry['prepared']}
-        for expense in expenses:
-            if expense.source_id not in active and expense.block_id in removed_blocks:
-                raise ValueError('Spesa importata modificata: usare un nuovo blocco Notion per nuove spese')
-            if expense.source_id in active and active[expense.source_id]['marked'] and not expense.checked:
-                raise ValueError('tick rimosso o acquisto identico nello stesso blocco: riconciliazione richiesta')
         with self.db:
             self.db.execute('UPDATE observed SET active=0 WHERE page=?', (page,))
             for expense in expenses:
